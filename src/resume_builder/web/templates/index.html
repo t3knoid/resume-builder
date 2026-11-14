@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% set user = None %}
+{% block body %}
+<h1>Users</h1>
+<div class="card">
+{% if users %}<ul>{% for u in users %}<li><a href="/u/{{ u }}/">{{ u }}</a></li>{% endfor %}</ul>
+{% else %}<p>No user folders yet. Set <code>RB_DEFAULT_USER</code> in <code>.env</code> and restart, or run <code>docker compose run --rm app rb init-user &lt;name&gt;</code>.</p>{% endif %}
+{% for p in folder_problems %}<p class="stale">{{ p }}</p>{% endfor %}
+</div>
+{% endblock %}

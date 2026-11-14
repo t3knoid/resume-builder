@@ -1,0 +1,40 @@
+/* resume/classic v1. Released: never edit; add a new version instead. */
+@page { size: Letter; margin: 0.6in 0.7in; }
+* { box-sizing: border-box; }
+body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 10pt; line-height: 1.38; color: #1d1d1f; margin: 0; }
+header { border-bottom: 2px solid #1f4e79; padding-bottom: 6pt; margin-bottom: 10pt; }
+h1 { font-size: 20pt; margin: 0; letter-spacing: 0.3pt; color: #1f4e79; }
+.headline { margin: 2pt 0 0; font-size: 11pt; color: #333; }
+.contact { margin: 4pt 0 0; font-size: 9pt; color: #444; }
+.contact a { color: #1f4e79; text-decoration: none; }
+h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: 1pt; color: #1f4e79; margin: 12pt 0 4pt; border-bottom: 0.5pt solid #c8d3df; }
+.item { margin-bottom: 7pt; break-inside: avoid; }
+.item-head { display: flex; justify-content: space-between; }
+.title { font-weight: bold; }
+.official { color: #555; font-size: 9pt; }
+.dates { color: #555; white-space: nowrap; }
+.org { font-style: italic; color: #333; }
+ul { margin: 3pt 0 0 14pt; padding: 0; }
+li { margin-bottom: 2pt; }
+p { margin: 2pt 0; }
+dl.skills { display: grid; grid-template-columns: max-content 1fr; gap: 2pt 10pt; margin: 0; }
+dl.skills dt { font-weight: bold; }
+dl.skills dd { margin: 0; }
+.watermark { position: fixed; top: 40%; left: 0; right: 0; text-align: center; font-size: 34pt; color: rgba(200, 0, 0, 0.16); transform: rotate(-24deg); }
+
+/* ATS variant: single column, plain structure, no decoration. */
+body.ats { font-family: Arial, "Liberation Sans", sans-serif; color: #000; }
+body.ats header { border: 0; }
+body.ats h1, body.ats h2 { color: #000; border: 0; }
+body.ats .item-head { display: block; }
+body.ats .dates::before { content: " | "; }
+body.ats dl.skills { display: block; }
+body.ats dl.skills dt { display: inline; }
+body.ats dl.skills dt::after { content: ": "; }
+body.ats dl.skills dd { display: inline; }
+body.ats dl.skills dd::after { content: ""; display: block; }
+
+/* Public site on screens. */
+@media screen {
+  body.site { max-width: 820px; margin: 0 auto; padding: 24px 16px; font-size: 16px; }
+}

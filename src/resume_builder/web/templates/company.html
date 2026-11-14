@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ view.company.name or view.company.slug }}</h1>
+<div class="card">
+{% if view.company.aliases %}<p class="muted">Also seen as: {{ view.company.aliases | join(", ") }}</p>{% endif %}
+{% if view.company.notes %}<p>{{ view.company.notes }}</p>{% endif %}
+{% if view.company.departments %}<p>Departments: {% for d in view.company.departments %}{{ d.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</div>
+<div class="card"><h2>Every application, over time</h2>
+<table><tr><th>Job</th><th>Department</th><th>Title</th><th>Stage</th><th>Applied</th></tr>
+{% for a in view.applications %}<tr><td><a href="/u/{{ user }}/jobs/{{ a.job_id }}">{{ a.job_id }}</a></td><td>{{ a.department or "" }}</td><td>{{ a.title or "" }}</td><td><span class="pill stage-{{ a.stage }}">{{ a.stage }}</span>{% if a.archived %} (archived){% endif %}</td><td>{{ a.applied_on or "—" }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">No applications yet.</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}

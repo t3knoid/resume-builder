@@ -1,0 +1,31 @@
+# resume-builder: `docker compose up` (PRD DK11).
+# Copy .env.example to .env first and fill it in.
+services:
+  app:
+    build:
+      context: .
+      args:
+        RB_BUILD_ID: ${RB_BUILD_ID:-local-build}
+    image: resume-builder:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      RB_DEFAULT_USER: ${RB_DEFAULT_USER:-}
+      TZ: ${TZ:-UTC}
+      RB_HOST_PORT: ${RB_HOST_PORT:-8000}   # only used to print the right address
+    # Reachable only from this machine (section 10). Inside the container the server listens
+    # on all interfaces, as containers require; only 127.0.0.1 on the host is published.
+    ports:
+      - "127.0.0.1:${RB_HOST_PORT:-8000}:8000"
+    volumes:
+      - ${RB_HOST_DATA:-./data}:/data          # your YAML/Markdown files (edit these)
+      - rb-db:/db                              # SQLite databases: the source of truth
+      - ${RB_HOST_OUTPUT:-./output}:/output    # exported PDFs (disposable)
+      - ${RB_HOST_BACKUPS:-./backups}:/backups # database backups (copy these off the machine)
+    restart: unless-stopped
+
+volumes:
+  rb-db:

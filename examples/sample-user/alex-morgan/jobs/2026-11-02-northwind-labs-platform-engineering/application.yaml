@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../.schemas/application.schema.json
+schema_version: 1
+job_id: 2026-11-02-northwind-labs-platform-engineering
+company: northwind-labs
+department: platform-engineering
+title: Platform Automation Engineer
+posting_url: https://example.com/jobs/1234
+source: company_site
+external_id: '1234'
+location: Remote (US)
+work_arrangement: remote
+salary_range: null
+date_posted: 2026-10-28
+closing_date: null
+interest_level: 4
+interest_notes: I want to work on an internal platform used by many teams, and Northwind's posting describes exactly the CI and monitoring work I enjoy most.
+fit_summary: Strong on CI/CD and monitoring; Kubernetes is a gap.
+next_action: Follow up with the recruiter
+next_action_due: 2026-11-16
+outcome_reason: null
+submission:
+  applied_via: null
+  resume_snapshot: null
+  cover_letter_snapshot: null
+  answer_snapshots: []
+  referral: null
+contacts:
+  - name: Jordan Reyes
+    role: recruiter
+    channel: email
+    notes: null
+notes: null
+events:
+  - date: 2026-11-02
+    type: stage_change
+    stage: interested

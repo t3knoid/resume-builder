@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=.schemas/user.schema.json
+#
+# YOUR SETTINGS. (Fictional example user.)
+
+schema_version: 1
+display_name: Alex Morgan
+headline: Platform and automation engineer
+location: Portland, OR
+links:
+  - label: GitHub
+    url: https://github.com/example-alex
+timezone: America/Los_Angeles
+template: classic
+template_version: null
+contact:
+  email_secret: RB_CONTACT_EMAIL
+  phone_secret: null
+tracker:
+  stale_days: 14
+writing:
+  answer_max_words: 100
+  cover_letter_min_words: 120
+  cover_letter_max_words: 350
+  banned_phrases: [proven track record, passionate about, leverage, synergy]
+snapshots:
+  max_per_job_and_type: 10
+  max_total: 1000
+backups:
+  keep: 30
+publish:
+  enabled: false
+  target: null

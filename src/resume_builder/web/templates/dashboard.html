@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Dashboard</h1>
+<div class="grid">
+  <div class="card"><div class="muted">Applications</div><div class="stat">{{ d.applications }}</div><div class="muted">{{ d.applied }} applied</div></div>
+  <div class="card"><div class="muted">Response rate</div><div class="stat">{{ "%.0f%%" % (d.response_rate * 100) if d.response_rate is not none else "—" }}</div></div>
+  <div class="card"><div class="muted">Median days to first response</div><div class="stat">{{ d.median_days_to_first_response if d.median_days_to_first_response is not none else "—" }}</div></div>
+  <div class="card"><div class="muted">Response rate with / without cover letter</div><div class="stat" style="font-size:20px">
+    {{ "%.0f%%" % (d.response_rate_with_cover_letter * 100) if d.response_rate_with_cover_letter is not none else "—" }} /
+    {{ "%.0f%%" % (d.response_rate_without_cover_letter * 100) if d.response_rate_without_cover_letter is not none else "—" }}</div></div>
+</div>
+{% set maxw = (d.applications_per_week.values() | max) if d.applications_per_week else 1 %}
+<div class="card"><h2>Applications per week</h2>
+{% if d.applications_per_week %}<table>{% for w, n in d.applications_per_week.items() %}<tr><td style="width:110px">{{ w }}</td><td><span class="bar" style="width:{{ (n / maxw * 100) | round }}%"></span> {{ n }}</td></tr>{% endfor %}</table>
+{% else %}<p class="muted">No applications sent yet.</p>{% endif %}</div>
+{% set maxs = (d.stages_reached | map(attribute="count") | max) if d.stages_reached else 1 %}
+<div class="card"><h2>How far applications got</h2>
+<table>{% for s in d.stages_reached %}<tr><td style="width:130px">{{ s.stage }}</td><td><span class="bar" style="width:{{ (s.count / maxs * 100) | round }}%"></span> {{ s.count }}</td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Outcomes by source</h2>
+<table><tr><th>Source</th><th>Current stages</th></tr>{% for src, stages in d.outcomes_by_source.items() %}<tr><td>{{ src }}</td><td>{% for s, n in stages.items() %}<span class="pill stage-{{ s }}">{{ s }}: {{ n }}</span> {% endfor %}</td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Bullets in resumes that reached interviews</h2>
+{% if d.bullets_in_resumes_that_reached_interviews %}<ol>{% for b, n in d.bullets_in_resumes_that_reached_interviews %}<li><code>{{ b }}</code> ({{ n }})</li>{% endfor %}</ol>
+{% else %}<p class="muted">Appears once an application with a recorded resume reaches the interview stage.</p>{% endif %}</div>
+{% endblock %}

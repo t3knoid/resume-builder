@@ -1,0 +1,39 @@
+<!doctype html>
+{#- Released template: letter/classic v1 (cover letters, answers, fit reports). Never edit after release. -#}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ c.person.name }} — {{ {'cover_letter': 'Cover letter', 'answer': 'Answer', 'fit_report': 'Fit report'}[c.doc_type] }}</title>
+<meta name="author" content="{{ c.person.name }}">
+<meta name="generator" content="resume-builder {{ c.app_version }}">
+<meta name="dcterms.created" content="{{ created }}">
+<meta name="dcterms.modified" content="{{ created }}">
+<style>{{ css | safe }}</style>
+</head>
+<body class="{{ c.doc_type }}{% if c.preview %} preview{% endif %}">
+{% if c.preview %}<div class="watermark">PREVIEW</div>{% endif %}
+<header>
+  <h1>{{ c.person.name }}</h1>
+  <p class="contact">
+    {%- set parts = [] -%}
+    {%- if c.person.location %}{% set _ = parts.append(c.person.location) %}{% endif -%}
+    {%- if contact.email %}{% set _ = parts.append(contact.email) %}{% endif -%}
+    {%- if contact.phone %}{% set _ = parts.append(contact.phone) %}{% endif -%}
+    {{ parts | join(' · ') }}
+  </p>
+</header>
+{% if c.doc_type == 'cover_letter' %}
+<p class="date">{{ c.document.date }}</p>
+<p class="recipient">{{ c.document.recipient.company }}{% if c.document.recipient.title %}<br>Re: {{ c.document.recipient.title }}{% endif %}</p>
+{% elif c.doc_type == 'answer' and c.document.question %}
+<h2>{{ c.document.question }}</h2>
+{% elif c.doc_type == 'fit_report' %}
+<h2>Fit report: {{ c.job_key }}</h2>
+{% endif %}
+<main class="{{ 'pre' if c.doc_type == 'fit_report' else '' }}">
+{% for p in c.document.paragraphs %}<p>{{ p }}</p>
+{% endfor %}
+</main>
+{% if c.doc_type == 'cover_letter' %}<p class="signoff">{{ c.person.name }}</p>{% endif %}
+</body>
+</html>

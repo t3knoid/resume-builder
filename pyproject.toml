@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resume-builder"
+version = "0.2.0"
+description = "Honest, tailored resumes, cover letters and application answers, plus a job-application tracker."
+requires-python = ">=3.12"
+license = {text = "AGPL-3.0-or-later"}
+classifiers = ["License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)"]
+dependencies = [
+  "fastapi==0.115.12",
+  "uvicorn==0.34.2",
+  "jinja2==3.1.6",
+  "pydantic==2.11.4",
+  "ruamel.yaml==0.18.10",
+  "python-multipart==0.0.20",
+]
+
+[project.optional-dependencies]
+pdf = ["weasyprint==65.1"]
+test = ["pytest==8.3.5", "httpx==0.28.1"]
+
+[project.scripts]
+rb = "resume_builder.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+resume_builder = ["web/templates/*.html", "web/static/*", "templates/**/*", "migrations/*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

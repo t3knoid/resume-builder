@@ -1,0 +1,79 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/base.schema.json
+#
+# YOUR CONTENT LIBRARY. Every claim that can ever appear on a resume, cover letter or answer.
+# Put everything here, even things you wouldn't put on every resume: each job picks what fits.
+#
+# What to do first: replace the `example-` entries below with your own. Copy an example, change
+# the id and text, and delete the example. Examples are drafts, so they never reach a real resume.
+#
+# Rules the app enforces:
+#   - ids: lowercase letters, digits and hyphens, unique in this file. Never reuse one.
+#   - status: draft until you've checked it's accurate, then confirmed. Only confirmed items are used.
+#   - metric: a real number you can stand behind. Leave it null rather than guess.
+#   - text: wrap words in **double asterisks** to show them in bold, e.g. Built **Ansible** roles.
+#   - evidence and limits are notes for you and the AI. They never appear on documents.
+#   - Deleting an entry archives it; old documents that used it are unaffected.
+
+schema_version: 1
+
+summary_phrases:                       # Building blocks for the summary at the top of a resume.
+  - id: example-summary                # A short, unique id.
+    text: Infrastructure engineer who automates repetitive operations work.
+    tags: [automation]                 # Keywords this phrase supports, lowercase-with-hyphens.
+    status: draft                      # draft | confirmed
+
+roles:                                 # Jobs, newest first.
+  - id: example-role
+    title: Systems Engineer            # The title that describes the work you did.
+    official_title: null               # Your official title, if different. Shown under the title.
+    company: Example Company
+    location: Remote
+    start: 2021-03                     # YYYY-MM or YYYY
+    end: present                       # YYYY-MM, YYYY, or present
+    description: null                  # One line about the employer, shown under the company. e.g. "Example Company makes billing software for clinics."
+    bullets:
+      - id: example-bullet-patching
+        text: Cut monthly patching from two days to four hours by automating it with Ansible across 120 Linux hosts.
+        tags: [ansible, linux, automation, patching]
+        metric: 2 days to 4 hours; 120 hosts   # Only numbers you can back up.
+        evidence: Change tickets and the old runbook.   # Where this comes from. Never shown.
+        limits: Linux only; Windows patching stayed manual.   # How far the claim goes. Never shown.
+        status: draft
+      - id: example-bullet-monitoring
+        text: Built Prometheus and Grafana monitoring for 40 services, replacing ad-hoc scripts.
+        tags: [prometheus, grafana, monitoring]
+        metric: 40 services
+        evidence: null
+        limits: null
+        status: draft
+
+projects:                              # Personal, lab or volunteer work. Give it dates.
+  - id: example-project
+    name: Home lab monitoring stack
+    start: 2024-09
+    end: present
+    description: null                  # One optional line of context.
+    bullets:
+      - id: example-bullet-homelab
+        text: Run a three-node Proxmox cluster with automated backups and alerting.
+        tags: [proxmox, monitoring]
+        metric: null
+        evidence: null
+        limits: Personal environment, not production.
+        status: draft
+
+education:
+  - id: example-degree
+    institution: Example University
+    degree: B.S.                       # null if not applicable
+    field: Computer Science
+    start: null
+    end: 2012
+    status: draft
+
+certifications: []                     # e.g. - {id: rhcsa, name: RHCSA, issuer: Red Hat, date: 2023-05, status: confirmed}
+
+skills:                                # Grouped skill lists. A profile picks which groups to show, in which order.
+  - id: example-skills-automation
+    name: Automation
+    items: [Ansible, Bash, Python]

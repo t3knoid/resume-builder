@@ -1,0 +1,16 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/profile.schema.json
+#
+# TAILORED RESUME for this job: which base.yaml items to show, in which order. Ids only, no text.
+# Usually written by your AI agent; you review and edit it here. Read fit-report.md alongside it.
+
+schema_version: 1
+summary: []                            # summary phrase ids, in order
+roles: {}                              # role id -> [bullet ids], newest role first
+projects: {}                           # project id -> [bullet ids]
+education: []
+certifications: []
+skills: []                             # skill group ids, in order
+keywords: []                           # posting keywords this resume claims; each must be a tag in base.yaml
+earlier_roles: {}                      # older roles condensed into one "Earlier Experience" entry: role id -> [bullet ids], often []
+omitted_roles: []                      # every role not under `roles` or `earlier_roles` needs a reason: - {role: id, reason: ...}
+gaps: []                               # posting asks for it, base.yaml doesn't have it: - {skill: ..., note: ...}

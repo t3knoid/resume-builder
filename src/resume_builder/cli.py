@@ -1,0 +1,484 @@
+"""`rb`: the command-line interface. A thin client of the operation registry (PRD A5, DK12).
+
+Every command that touches data calls an operation through `invoke`, so it gets the same
+permission checks, validation and audit as the HTTP API.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import date
+
+from . import services, sync_ops  # noqa: F401  (registers operations)
+from . import sync as sync_mod
+from .errors import AppError
+from .operations import invoke
+from .security import RequestContext
+from .space import App, build_app
+
+NO_PRESYNC = {"serve", "bootstrap", "doctor", "init-user", "sync", "resolve", "token", "restore", "backups", "call", "ops",
+              "mcp", "agent-instructions"}
+
+
+def _print(obj) -> None:
+    if isinstance(obj, str):
+        print(obj, end="" if obj.endswith("\n") else "\n")
+    else:
+        print(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
+
+
+def _ctx(app: App, user: str) -> RequestContext:
+    token = os.environ.get("RB_ACTOR_TOKEN")
+    if token:
+        from .services.space_ops import actor_for_token
+        actor = actor_for_token(app.space(user), token)
+        if actor is None:
+            raise AppError("RB_ACTOR_TOKEN isn't a valid token for this user.")
+        return RequestContext(actor=actor, roles=(actor,), user_id=user, channel="cli", tenant_id=app.tenant_id)
+    return RequestContext.owner(user)
+
+
+def _user(app: App, args) -> str:
+    user = args.user or app.settings.default_user
+    if not user:
+        users, _ = app.discover_users()
+        if len(users) == 1:
+            return users[0]
+        raise AppError("Which user? Pass --user <name> or set RB_DEFAULT_USER.")
+    return user
+
+
+def _pick(prompt: str, options: list[dict]) -> str | None:
+    print(prompt)
+    for i, o in enumerate(options, start=1):
+        print(f"  {i}) {o['name']}  [{o['slug']}]")
+    print(f"  {len(options) + 1}) add a new one")
+    while True:
+        choice = input("Choose a number: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(options) + 1:
+            return None if int(choice) == len(options) + 1 else options[int(choice) - 1]["slug"]
+
+
+def _new_job_interactive(app: App, ctx: RequestContext, args) -> dict:
+    company = args.company or input("Company name (as shown in the job description): ").strip()
+    matches = invoke(app, ctx, "org_suggest", {"name": company})
+    create = args.create
+    if not any(m["slug"] == company for m in matches) and sys.stdin.isatty():
+        if matches:
+            picked = _pick(f"Companies matching '{company}':", matches)
+            if picked:
+                company = picked
+            else:
+                create = True
+        else:
+            create = input(f"'{company}' is new. Add it to organizations.yaml? [Y/n] ").strip().lower() in ("", "y", "yes")
+    department = args.department
+    if department is None and sys.stdin.isatty() and not args.company:
+        department = input("Department (optional, Enter to skip): ").strip() or None
+    if department and sys.stdin.isatty():
+        reg = invoke(app, ctx, "org_list", {})
+        slug = next((c["slug"] for c in reg["companies"] if c["slug"] == company), None)
+        if slug:
+            dm = invoke(app, ctx, "org_suggest", {"name": department, "company": slug})
+            if dm and not any(m["slug"] == department for m in dm):
+                picked = _pick(f"Departments matching '{department}':", dm)
+                department = picked or department
+                create = create or picked is None
+    return invoke(app, ctx, "job_new", {"company": company, "department": department, "title": args.title,
+                                        "posting_url": args.url, "source": args.source, "create_missing": create})
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="rb", description="resume-builder: honest tailored resumes and an application tracker.")
+    p.add_argument("--user", help="user folder name (default: RB_DEFAULT_USER)")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="command")
+
+    def cmd(name, help_):
+        return sub.add_parser(name, help=help_, description=help_)
+
+    cmd("serve", "Run bootstrap, then the website, API and sync watcher.")
+    b = cmd("bootstrap", "Check mounts, set up and repair user folders, sync.")
+    b.add_argument("--check", action="store_true", help="change nothing (same as doctor)")
+    cmd("doctor", "Check everything without changing anything.")
+    i = cmd("init-user", "Create a user folder from the seed.")
+    i.add_argument("name")
+    i.add_argument("--display-name")
+    i.add_argument("--timezone", default="UTC")
+
+    s = cmd("sync", "Validate changed files and apply them to the database.")
+    s.add_argument("--check", action="store_true", help="validate only")
+    r = cmd("resolve", "Resolve a sync conflict.")
+    r.add_argument("file")
+    r.add_argument("--keep", choices=["file", "app"], required=True)
+    cmd("status", "Sync status, problems, example entries left, limits.")
+    cmd("export-files", "Recreate missing working-copy files from the database.")
+
+    n = cmd("new-job", "Start tracking a job (asks for company and department if not given).")
+    n.add_argument("--company")
+    n.add_argument("--department")
+    n.add_argument("--title")
+    n.add_argument("--url")
+    n.add_argument("--source", choices=["linkedin", "referral", "company_site", "recruiter", "job_board", "other"])
+    n.add_argument("--create", action="store_true", help="add the company/department if no match")
+    ls = cmd("list", "List applications.")
+    ls.add_argument("--stage")
+    ls.add_argument("--company")
+    ls.add_argument("--all", action="store_true", help="include archived")
+    sh = cmd("show", "Show one application.")
+    sh.add_argument("job_id")
+    e = cmd("event", "Add an event to an application.")
+    e.add_argument("job_id")
+    e.add_argument("--type", default="stage_change", choices=["stage_change", "interview", "follow_up_sent", "message_received", "note", "document_sent", "correction"])
+    e.add_argument("--stage")
+    e.add_argument("--date", default=None, help="YYYY-MM-DD (default today)")
+    e.add_argument("--notes")
+    e.add_argument("--contact")
+    e.add_argument("--documents", nargs="*", default=[], help="snapshot ids you sent")
+    e.add_argument("--corrects", type=int)
+    cmd("event-drafts", "Events proposed by the agent, waiting for you.")
+    ce = cmd("confirm-event", "Confirm a proposed event.")
+    ce.add_argument("draft_id", type=int)
+    de = cmd("discard-event", "Discard a proposed event.")
+    de.add_argument("draft_id", type=int)
+    a = cmd("archive-job", "Archive an application (nothing is deleted).")
+    a.add_argument("job_id")
+    a.add_argument("--restore", action="store_true")
+
+    cmd("orgs", "List companies and departments.")
+    ac = cmd("add-company", "Add a company.")
+    ac.add_argument("name")
+    ac.add_argument("--slug")
+    ac.add_argument("--force", action="store_true")
+    ad = cmd("add-department", "Add a department under a company.")
+    ad.add_argument("company")
+    ad.add_argument("name")
+    ad.add_argument("--force", action="store_true")
+    rn = cmd("rename-org", "Rename a company or department (old name kept as alias).")
+    rn.add_argument("company")
+    rn.add_argument("new_name")
+    rn.add_argument("--department")
+    mg = cmd("merge-orgs", "Merge a duplicate company into another.")
+    mg.add_argument("keep")
+    mg.add_argument("merge")
+
+    br = cmd("brief", "Print the agent brief for a job (give it to your AI tool).")
+    br.add_argument("job_id")
+    br.add_argument("--for", dest="mode", choices=["chat", "mcp", "api"], default="chat",
+                    help="how the agent hands work back: chat (copy-paste, default), mcp tools, or the HTTP API")
+    ai = cmd("agent-instructions", "Print standing instructions to paste into an AI tool's custom instructions.")
+    ai.add_argument("--for", dest="mode", choices=["chat", "mcp", "api"], default="chat")
+    pr = cmd("propose", "Submit a draft from a chat assistant (read from stdin), checked as the agent's work.")
+    pr.add_argument("job_id", help="job id, or `public` for a profile")
+    pr.add_argument("kind", choices=["profile", "fit_report", "cover_letter", "answer"])
+    pr.add_argument("--slug", help="for answers (default why-here)")
+    pr.add_argument("--question", help="for answers other than why-here")
+    cmd("mcp", "Run the MCP server on stdin/stdout for MCP-capable AI tools (acts as the agent).")
+    cf = cmd("confirm", "Confirm a draft bullet or other library item, or all drafts with --all.")
+    cf.add_argument("id", nargs="?")
+    cf.add_argument("--all", action="store_true", help="confirm every draft (lists them and asks first)")
+    cf.add_argument("--yes", "-y", action="store_true", help="with --all: skip the question")
+    ap = cmd("approve", "Approve a cover letter or answer.")
+    ap.add_argument("job_id")
+    ap.add_argument("kind", choices=["cover_letter", "answer"])
+    ap.add_argument("--slug")
+
+    rd = cmd("render", "Snapshot a document and export it to output/.")
+    rd.add_argument("job_key", help="job id, or `public`")
+    rd.add_argument("--type", default="resume", choices=["resume", "cover_letter", "answer", "fit_report"])
+    rd.add_argument("--slug")
+    rd.add_argument("--preview", action="store_true", help="include drafts, watermarked")
+    rd.add_argument("--ats", action="store_true", help="plain single-column variant")
+    rd.add_argument("--format", default="pdf", choices=["pdf", "html", "txt", "none"])
+    rg = cmd("regenerate", "Rebuild a document exactly from a snapshot.")
+    rg.add_argument("snapshot_id", nargs="?")
+    rg.add_argument("--job")
+    rg.add_argument("--type")
+    rg.add_argument("--as-of")
+    rg.add_argument("--format", default="pdf", choices=["pdf", "html", "txt"])
+    sn = cmd("snapshots", "List saved snapshots.")
+    sn.add_argument("job_key", nargs="?")
+    sn.add_argument("--type")
+    for name, help_ in (("pin", "Pin a snapshot."), ("unpin", "Unpin a snapshot.")):
+        x = cmd(name, help_)
+        x.add_argument("snapshot_id")
+    ds = cmd("delete-snapshot", "Delete a snapshot.")
+    ds.add_argument("snapshot_id")
+    ds.add_argument("--confirm", action="store_true")
+    df = cmd("diff", "Compare two snapshots.")
+    df.add_argument("a")
+    df.add_argument("b")
+    cmd("publish", "Render the public profile as a static site in output/<user>/public/.")
+    cmd("clean-output", "Delete exported files (they can be regenerated).")
+
+    cmd("dashboard", "Search statistics.")
+    cmd("actions", "Upcoming actions and stale applications.")
+    t = cmd("token", "Issue an API token (replaces the previous one).")
+    t.add_argument("--actor", choices=["owner", "agent"], default="agent")
+    cmd("backup", "Back up the database now.")
+    cmd("backups", "List backups.")
+    rs = cmd("restore", "Restore the database from a backup.")
+    rs.add_argument("file")
+    cmd("audit", "Recent audit log entries.")
+    cmd("ops", "List every operation and its permission.")
+    c = cmd("call", "Call any operation with JSON input.")
+    c.add_argument("operation")
+    c.add_argument("json", nargs="?", default="{}")
+    return p
+
+
+def drop_root() -> None:
+    """Re-run `rb` as the host user when started as root inside the container.
+
+    `docker compose exec app sh` skips the entrypoint, so the shell is root. Files `rb` wrote
+    from there (database, backups, write-back, job folders) would be root-owned and the server,
+    running as PUID:PGID, could no longer change them. Switch user the same way the entrypoint does.
+    """
+    geteuid = getattr(os, "geteuid", None)
+    puid, pgid = os.environ.get("PUID", ""), os.environ.get("PGID", "")
+    if geteuid is None or geteuid() != 0 or not puid.isdigit() or not pgid.isdigit() or puid == "0":
+        return
+    os.execvp("setpriv", ["setpriv", f"--reuid={puid}", f"--regid={pgid}", "--clear-groups", sys.executable, "-m", "resume_builder.cli", *sys.argv[1:]])
+
+
+def main(argv: list[str] | None = None) -> int:
+    if argv is None:  # a real command line, not a test calling main([...])
+        drop_root()
+    args = build_parser().parse_args(argv)
+    app = build_app()
+    try:
+        return _run(app, args) or 0
+    except AppError as exc:
+        print(f"Error: {exc.message}", file=sys.stderr)
+        for prob in exc.problems:
+            print(f"  - {prob.render()}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        app.close()
+
+
+def _run(app: App, args) -> int | None:
+    from .sync_ops import bootstrap
+    if args.cmd == "serve":
+        from .server import serve
+        return serve(app)
+    if args.cmd in ("bootstrap", "doctor"):
+        report = bootstrap(app, check_only=args.cmd == "doctor" or getattr(args, "check", False))
+        print_bootstrap(report)
+        return 0
+    if args.cmd == "ops":
+        for op in sorted(app.registry.values(), key=lambda o: o.name):
+            print(f"{op.name:22} {op.permission:22} {'write' if op.writes else 'read '}  {op.summary}")
+        return 0
+    if args.cmd == "init-user":
+        ctx = RequestContext.owner(args.name)
+        _print(invoke(app, ctx, "space_init", {"display_name": args.display_name, "timezone": args.timezone}))
+        return 0
+
+    if args.cmd == "agent-instructions":
+        from .services.profiles import agent_instructions
+        _print(agent_instructions(args.mode))
+        return 0
+    user = _user(app, args)
+    if args.cmd == "mcp":
+        from .mcp import serve_stdio
+        space = app.space(user)
+        sync_mod.run_sync(space, RequestContext.system(user))
+        return serve_stdio(app, user)
+    ctx = _ctx(app, user)
+    if args.cmd not in NO_PRESYNC:
+        report = sync_mod.run_sync(app.space(user), RequestContext.system(user))  # quick: unchanged files are skipped
+        if not report.ok:
+            print("Note: some files have problems; see SYNC-STATUS.md (`rb status`).", file=sys.stderr)
+
+    def op(name, payload=None):
+        return invoke(app, ctx, name, payload or {})
+
+    c = args.cmd
+    if c == "sync":
+        result = op("sync", {"check_only": args.check})
+        print_sync(result)
+        return 0 if result["ok"] else 2
+    if c == "resolve":
+        print_sync(op("resolve", {"file": args.file, "keep": args.keep}))
+    elif c == "status":
+        _print(op("space_status"))
+    elif c == "export-files":
+        _print(op("export_files"))
+    elif c == "new-job":
+        _print(_new_job_interactive(app, ctx, args))
+    elif c == "list":
+        rows = op("job_list", {"stage": args.stage, "company": args.company, "include_archived": args.all})
+        for r in rows:
+            flag = " STALE" if r["stale"] else ""
+            print(f"{r['job_id']:52} {r['stage']:13} {(r['title'] or '')[:40]}{flag}")
+        if not rows:
+            print("No applications yet. Start one with: rb new-job")
+    elif c == "show":
+        _print(op("job_get", {"job_id": args.job_id}))
+    elif c == "event":
+        ev = {"date": args.date or date.today().isoformat(), "type": args.type, "stage": args.stage,
+              "notes": args.notes, "contact": args.contact, "documents": args.documents, "corrects": args.corrects}
+        _print(op("event_append", {"job_id": args.job_id, "event": ev}))
+    elif c == "event-drafts":
+        _print(op("event_drafts"))
+    elif c == "confirm-event":
+        _print(op("event_confirm", {"draft_id": args.draft_id}))
+    elif c == "discard-event":
+        _print(op("event_discard", {"draft_id": args.draft_id}))
+    elif c == "archive-job":
+        _print(op("job_archive", {"job_id": args.job_id, "archived": not args.restore}))
+    elif c == "orgs":
+        for comp in op("org_list")["companies"]:
+            print(f"{comp['slug']:30} {comp['name']}")
+            for d in comp["departments"]:
+                print(f"  {d['slug']:28} {d['name']}")
+    elif c == "add-company":
+        _print(op("company_add", {"name": args.name, "slug": args.slug, "force": args.force}))
+    elif c == "add-department":
+        _print(op("department_add", {"company": args.company, "name": args.name, "force": args.force}))
+    elif c == "rename-org":
+        _print(op("org_rename", {"company": args.company, "department": args.department, "new_name": args.new_name}))
+    elif c == "merge-orgs":
+        _print(op("org_merge", {"keep": args.keep, "merge": args.merge}))
+    elif c == "brief":
+        _print(op("agent_brief", {"job_id": args.job_id, "mode": args.mode}))
+    elif c == "propose":
+        # Windows PowerShell 5.1 starts piped text with a byte-order mark; it isn't part of the draft.
+        text = sys.stdin.read().lstrip("﻿")
+        if not text.strip():
+            raise AppError("Nothing on stdin. Pipe the draft in, e.g. `pbpaste | rb propose <job-id> profile`.")
+        # Pasted drafts are submitted as the agent's work, so they get the agent's strict checks (B7).
+        agent_ctx = RequestContext.agent(user, channel="cli")
+        if args.kind == "profile":
+            result = invoke(app, agent_ctx, "profile_propose_text", {"key": args.job_id, "text": text})
+        else:
+            from .yamlio import strip_code_fence
+            result = invoke(app, agent_ctx, "document_propose", {
+                "job_id": args.job_id, "kind": args.kind, "text": strip_code_fence(text),
+                "slug": args.slug, "question": args.question})
+        _print(result)
+    elif c == "confirm":
+        if args.all == bool(args.id):
+            raise AppError("Give one id (`rb confirm <id>`) or `--all`, not both.")
+        if args.id:
+            _print(op("item_confirm", {"id": args.id}))
+        else:
+            return confirm_all(op, args.yes)
+    elif c == "approve":
+        _print(op("document_approve", {"job_id": args.job_id, "kind": args.kind, "slug": args.slug}))
+    elif c == "render":
+        _print(op("render", {"job_key": args.job_key, "doc_type": args.type, "slug": args.slug, "preview": args.preview,
+                             "variant": "ats" if args.ats else "styled", "export": None if args.format == "none" else args.format}))
+    elif c == "regenerate":
+        _print(op("regenerate", {"snapshot_id": args.snapshot_id, "job_key": args.job, "doc_type": args.type,
+                                 "as_of": args.as_of, "format": args.format}))
+    elif c == "snapshots":
+        for s in op("snapshot_list", {"job_key": args.job_key, "doc_type": args.type}):
+            lock = " protected" if s["protected"] else ""
+            print(f"{s['id']}  {s['job_key']:40} {s['doc_type']:12} {s['reason']:9} {s['created_at']}{lock}")
+    elif c == "pin":
+        _print(op("snapshot_pin", {"snapshot_id": args.snapshot_id}))
+    elif c == "unpin":
+        _print(op("snapshot_unpin", {"snapshot_id": args.snapshot_id}))
+    elif c == "delete-snapshot":
+        _print(op("snapshot_delete", {"snapshot_id": args.snapshot_id, "confirm_protected": args.confirm}))
+    elif c == "diff":
+        _print(op("snapshot_diff", {"a": args.a, "b": args.b}) or "(no differences)")
+    elif c == "publish":
+        _print(op("publish_public"))
+    elif c == "clean-output":
+        _print(op("clean_output"))
+    elif c == "dashboard":
+        _print(op("dashboard"))
+    elif c == "actions":
+        _print(op("actions"))
+    elif c == "token":
+        _print(op("token_issue", {"actor": args.actor}))
+    elif c == "backup":
+        _print(op("backup"))
+    elif c == "backups":
+        _print(op("backups_list"))
+    elif c == "restore":
+        _print(op("restore", {"file": args.file}))
+    elif c == "audit":
+        for e in op("audit_list"):
+            print(f"{e['at']}  {e['actor']:7} {e['channel']:10} {e['operation']:24} {e['target'][:40]:40} {e['result']}")
+    elif c == "call":
+        _print(op(args.operation, json.loads(args.json)))
+    return 0
+
+
+def print_sync(result: dict) -> None:
+    files = result["files"]
+    if not files:
+        print("Nothing changed since the last sync.")
+    for f in files:
+        mark = {"applied": "✓", "failed": "✗", "conflict": "⚠", "waiting": "…", "missing": "?"}.get(f["result"], "·")
+        print(f"{mark} {f['file']} ({f['result']})")
+        for p in f["problems"]:
+            loc = ", ".join(x for x in [f"line {p['line']}" if p.get("line") else "", f"`{p['field']}`" if p.get("field") else ""] if x)
+            print(f"    {'warning' if p['severity'] == 'warning' else 'problem'}{' (' + loc + ')' if loc else ''}: {p['message']}"
+                  + (f" Example: {p['example']}" if p.get("example") else ""))
+    if result.get("backup"):
+        print(f"(Database backed up first: {result['backup']})")
+
+
+def confirm_all(op, yes: bool, ask=input) -> int:
+    """`rb confirm --all`: list every draft, ask, then confirm them in one change."""
+    preview = op("library_confirm_all", {"dry_run": True})
+    if preview["skipped_examples"]:
+        print(f"Skipping {len(preview['skipped_examples'])} example entries (they can't be confirmed): replace them with your own.")
+    if not preview["count"]:
+        print("Nothing to confirm: no drafts in your content library.")
+        return 0
+    print(f"{preview['count']} draft item(s) would be confirmed:\n")
+    for it in preview["items"]:
+        text = it["text"] if len(it["text"]) <= 90 else it["text"][:87] + "..."
+        print(f"  {it['id']}  ({it['kind']})\n      {text}")
+    print("\nConfirmed items can appear on real resumes, letters and answers.")
+    print("Only confirm what you've checked is accurate: wording, tools, dates and metrics.")
+    if not yes:
+        if not sys.stdin.isatty():
+            raise AppError("Not confirming without an answer. Run it in a terminal, or add --yes.")
+        try:
+            answer = ask(f"Confirm all {preview['count']}? Type 'yes' to continue: ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("yes", "y"):
+            print("Nothing changed.")
+            return 1
+    done = op("library_confirm_all", {"dry_run": False, "ids": [it["id"] for it in preview["items"]]})
+    print(f"Confirmed {done['count']} item(s). base.yaml has been updated.")
+    return 0
+
+
+def print_bootstrap(report: dict) -> None:
+    for p in report.get("folders", []):
+        print(f"! {p}")
+    if report.get("created_user"):
+        print(f"Created your user folder: {report['created_user']} (see START-HERE.md inside it)")
+    if report.get("hint"):
+        print(report["hint"])
+    for user, entry in report.get("users", {}).items():
+        st = entry["status"]
+        print(f"\n== {user} ==")
+        for c in entry.get("created") or []:
+            print(f"  created {c}")
+        print_sync(entry["sync"])
+        if st["example_entries_left"]:
+            print(f"  Example entries still in base.yaml: {', '.join(st['example_entries_left'])}")
+        if st["missing_contact_secrets"]:
+            print(f"  Contact details not set: {', '.join(st['missing_contact_secrets'])} (add them to .env)")
+        if st["snapshots"]["near_limit"]:
+            print(f"  Saved documents near the limit: {st['snapshots']['count']} of {st['snapshots']['limit']}")
+        if st["event_drafts_waiting"]:
+            print(f"  {st['event_drafts_waiting']} proposed event(s) waiting: rb event-drafts")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

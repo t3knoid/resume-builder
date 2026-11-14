@@ -1,0 +1,41 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/application.schema.json
+#
+# ONE JOB APPLICATION. Fill in what you know; everything except job_id, company and the first
+# event is optional. Add new events at the END of `events` as things happen.
+# Recorded events can't be edited or removed: to fix one, add an event with type: correction.
+
+schema_version: 1
+job_id: null                           # Set by the app. Never changes.
+company: null                          # A slug from organizations.yaml (your editor suggests them).
+department: null                       # A department slug under that company, or null.
+title: null                            # Job title from the posting.
+posting_url: null
+source: null                           # linkedin | referral | company_site | recruiter | job_board | other
+external_id: null                      # The employer's requisition number, if shown.
+location: null
+work_arrangement: null                 # remote | hybrid | onsite | unknown
+salary_range: null                     # As posted, e.g. "$140k–$160k".
+date_posted: null                      # YYYY-MM-DD
+closing_date: null
+interest_level: null                   # 1 (meh) to 5 (dream job)
+interest_notes: null                   # Why you want this job, in your words. Letters and answers use ONLY this for motivation.
+fit_summary: null                      # Short note on fit, often copied from the fit report.
+next_action: null                      # e.g. "Follow up with recruiter"
+next_action_due: null                  # YYYY-MM-DD
+outcome_reason: null                   # Why it ended, once it has.
+submission:                            # Filled in when you apply (the app does this from the `applied` event).
+  applied_via: null                    # e.g. company site, email to recruiter
+  resume_snapshot: null                # snapshot id of the resume you sent (sn-...)
+  cover_letter_snapshot: null
+  answer_snapshots: []
+  referral: null
+contacts: []                           # - {name: Sam Lee, role: recruiter, channel: LinkedIn, notes: null}
+                                       #   role: recruiter | hiring_manager | interviewer | referrer | other
+notes: null                            # Private notes. Never on any document.
+events:                                # Oldest first. Add new ones at the end.
+  # - date: 2026-11-20
+  #   type: stage_change               # stage_change | interview | follow_up_sent | message_received | note | document_sent | correction
+  #   stage: applied                   # for stage_change: interested | tailoring | applied | acknowledged | screening |
+  #                                    #   interviewing | offer | accepted | declined | rejected | withdrawn | ghosted
+  #   documents: [sn-...]              # snapshot ids you sent (from `rb snapshots <job-id>`)
+  #   notes: Applied on the company site.

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}resume-builder{% endblock %}</title>
+<style>
+:root { --bg:#f7f8fa; --card:#fff; --ink:#1d2330; --muted:#5d6675; --line:#e2e6ec; --accent:#1f5f9e; --warn:#a45a00; --bad:#b3261e; --ok:#2e7d32; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1c2027; --ink:#e7eaf0; --muted:#9aa3b2; --line:#2c323c; --accent:#7fb2ea; --warn:#e0a34a; --bad:#f08b84; --ok:#7cc47f; } }
+* { box-sizing: border-box; }
+body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+header.top { background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+header.top a { color:var(--ink); text-decoration:none; font-weight:500; }
+header.top .brand { font-weight:700; color:var(--accent); }
+main { max-width:1100px; margin:0 auto; padding:16px; }
+a { color:var(--accent); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:14px; }
+h1 { font-size:22px; margin:4px 0 12px; } h2 { font-size:17px; margin:0 0 10px; }
+table { width:100%; border-collapse:collapse; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { font-size:13px; color:var(--muted); font-weight:600; } th a { color:var(--muted); }
+.table-wrap { overflow-x:auto; }
+.pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); white-space:nowrap; }
+.stage-applied,.stage-acknowledged,.stage-screening { border-color:var(--accent); color:var(--accent); }
+.stage-interviewing,.stage-offer,.stage-accepted { border-color:var(--ok); color:var(--ok); }
+.stage-rejected,.stage-ghosted,.stage-withdrawn,.stage-declined { color:var(--muted); }
+.stale { color:var(--warn); font-weight:600; } .bad { color:var(--bad); } .ok { color:var(--ok); } .muted { color:var(--muted); }
+form.filters { display:flex; gap:8px; flex-wrap:wrap; align-items:end; } form.filters label { font-size:13px; color:var(--muted); display:flex; flex-direction:column; }
+select, input, button { font:inherit; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); }
+.timeline { list-style:none; padding:0; margin:0; } .timeline li { border-left:2px solid var(--line); padding:4px 0 10px 12px; position:relative; }
+.timeline li::before { content:""; position:absolute; left:-6px; top:10px; width:10px; height:10px; border-radius:50%; background:var(--accent); }
+.bar { height:10px; background:var(--accent); border-radius:3px; display:inline-block; vertical-align:middle; }
+pre { white-space:pre-wrap; background:var(--bg); padding:10px; border-radius:6px; border:1px solid var(--line); max-height:420px; overflow:auto; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+.stat { font-size:26px; font-weight:700; }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">resume-builder</a>
+  {% if user %}<a href="/u/{{ user }}/">Home</a><a href="/u/{{ user }}/applications">Applications</a><a href="/u/{{ user }}/dashboard">Dashboard</a>{% endif %}
+  <span class="muted" style="margin-left:auto;font-size:12px">v{{ version }} · read-only · <a href="/docs">API</a></span>
+</header>
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

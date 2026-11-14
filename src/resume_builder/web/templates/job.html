@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ job.job_id }}{% endblock %}
+{% block body %}
+<h1>{{ job.title or job.job_id }} <span class="pill stage-{{ job.stage }}">{{ job.stage }}</span>{% if job.archived %} <span class="pill">archived</span>{% endif %}</h1>
+<p class="muted"><code>{{ job.job_id }}</code> · <a href="/u/{{ user }}/companies/{{ job.company }}">{{ job.company }}</a>{% if job.department %} / {{ job.department }}{% endif %}
+{% if job.location %} · {{ job.location }}{% endif %}{% if job.work_arrangement %} · {{ job.work_arrangement }}{% endif %}{% if job.salary_range %} · {{ job.salary_range }}{% endif %}
+{% if job.posting_url %} · <a href="{{ job.posting_url }}" rel="noreferrer">posting</a>{% endif %}</p>
+<div class="grid">
+<div class="card"><h2>Timeline</h2>
+<ul class="timeline">
+{% for e in job.event_log %}<li><strong>{{ e.date }}</strong> · {{ e.type | replace("_", " ") }}{% if e.stage %} → <span class="pill stage-{{ e.stage }}">{{ e.stage }}</span>{% endif %}
+{% if e.corrects %} <span class="muted">(corrects event {{ e.corrects }})</span>{% endif %}
+{% if e.notes %}<br>{{ e.notes }}{% endif %}
+{% if e.interview %}<br><span class="muted">Interview{% if e.interview.round %} round {{ e.interview.round }}{% endif %}{% if e.interview.format %}, {{ e.interview.format }}{% endif %}{% if e.interview.interviewers %} with {{ e.interview.interviewers | join(", ") }}{% endif %}</span>{% if e.interview.assessment %}<br><em>{{ e.interview.assessment }}</em>{% endif %}{% endif %}
+{% for d in e.documents %}<br><a href="/u/{{ user }}/snapshots/{{ d }}.pdf">{{ d }}</a> (<a href="/u/{{ user }}/snapshots/{{ d }}.html">html</a>){% endfor %}
+<br><span class="muted" style="font-size:12px">recorded {{ e.recorded_at }} by {{ e.actor }}</span></li>
+{% endfor %}
+</ul>
+{% if job.event_drafts %}<p class="stale">Proposed by the agent, waiting for you:</p><ul>{% for d in job.event_drafts %}<li>#{{ d.draft_id }} {{ d.date }} {{ d.type }} {{ d.stage or "" }} {{ d.notes or "" }}: <code>rb confirm-event {{ d.draft_id }}</code></li>{% endfor %}</ul>{% endif %}
+</div>
+<div class="card"><h2>Details</h2>
+<p><strong>Interest:</strong> {{ job.interest_level or "—" }}/5{% if job.interest_notes %}<br>{{ job.interest_notes }}{% endif %}</p>
+{% if job.next_action %}<p><strong>Next:</strong> {{ job.next_action }} {% if job.next_action_due %}({{ job.next_action_due }}){% endif %}</p>{% endif %}
+<p><strong>Sent:</strong>
+{% if job.submission.resume_snapshot %}resume <a href="/u/{{ user }}/snapshots/{{ job.submission.resume_snapshot }}.pdf">{{ job.submission.resume_snapshot }}</a>{% else %}<span class="muted">nothing recorded</span>{% endif %}
+{% if job.submission.cover_letter_snapshot %}<br>cover letter <a href="/u/{{ user }}/snapshots/{{ job.submission.cover_letter_snapshot }}.pdf">{{ job.submission.cover_letter_snapshot }}</a>{% endif %}
+{% for a in job.submission.answer_snapshots %}<br>answer <a href="/u/{{ user }}/snapshots/{{ a }}.html">{{ a }}</a>{% endfor %}</p>
+<h2>Contacts</h2>
+{% if job.contacts %}<ul>{% for c in job.contacts %}<li>{{ c.name }} <span class="muted">({{ c.role | replace("_", " ") }}{% if c.channel %}, {{ c.channel }}{% endif %})</span>{% if c.notes %}: {{ c.notes }}{% endif %}</li>{% endfor %}</ul>{% else %}<p class="muted">None recorded.</p>{% endif %}
+{% if job.notes %}<h2>Notes</h2><p>{{ job.notes }}</p>{% endif %}
+</div>
+</div>
+<div class="card"><h2>Documents</h2>
+{% if docs %}<table><tr><th>Document</th><th>Status</th><th>Approved version</th><th>Updated</th></tr>
+{% for d in docs %}<tr><td>{{ d.kind | replace("_", " ") }}{% if d.slug %} ({{ d.slug }}){% endif %}</td><td>{{ d.status }}</td><td>{% if d.approved_snapshot %}<a href="/u/{{ user }}/snapshots/{{ d.approved_snapshot }}.html">{{ d.approved_snapshot }}</a>{% endif %}</td><td>{{ d.updated_at }} by {{ d.updated_by }}</td></tr>{% endfor %}</table>
+{% else %}<p class="muted">No fit report, letter or answer yet.</p>{% endif %}
+{% if profile_diff %}<p><strong>Compared with your public resume:</strong> added {{ profile_diff.added | join(", ") or "nothing" }}; left out {{ profile_diff.removed | join(", ") or "nothing" }}.
+{% if profile_diff.gaps %}<br><strong>Gaps:</strong> {% for g in profile_diff.gaps %}{{ g.skill }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</p>{% endif %}
+</div>
+<div class="card"><h2>Saved snapshots</h2>
+{% if snaps %}
+<form method="get" action="/u/{{ user }}/diff">
+<table><tr><th>A</th><th>B</th><th>Snapshot</th><th>Type</th><th>Why</th><th>Created</th><th></th></tr>
+{% for s in snaps %}<tr><td><input type="radio" name="a" value="{{ s.id }}" {{ 'checked' if loop.index == loop.length - 1 }}></td><td><input type="radio" name="b" value="{{ s.id }}" {{ 'checked' if loop.last }}></td>
+<td><code>{{ s.id }}</code>{% if s.protected %} 🔒{% endif %}{% if s.preview %} <span class="pill">preview</span>{% endif %}</td><td>{{ s.doc_type | replace("_", " ") }}</td><td>{{ s.reason }}</td><td>{{ s.created_at }}</td>
+<td><a href="/u/{{ user }}/snapshots/{{ s.id }}.pdf">PDF</a> · <a href="/u/{{ user }}/snapshots/{{ s.id }}.html">HTML</a></td></tr>{% endfor %}
+</table><p><button>Compare A and B</button></p></form>
+{% else %}<p class="muted">Nothing rendered yet: <code>rb render {{ job.job_id }}</code>.</p>{% endif %}
+</div>
+{% if job.posting_text %}<div class="card"><h2>Posting</h2><pre>{{ job.posting_text }}</pre></div>{% endif %}
+{% endblock %}

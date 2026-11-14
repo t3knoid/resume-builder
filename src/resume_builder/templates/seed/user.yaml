@@ -1,0 +1,48 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/user.schema.json
+#
+# YOUR SETTINGS. Everything about you that the app needs, except your content (that's base.yaml).
+# Start here: set display_name, headline and location. Every other value already has a sensible
+# default, so you can leave it alone. Save the file; the app picks up changes within seconds.
+# Problems are listed in SYNC-STATUS.md next to this file.
+
+schema_version: 1                      # Don't change. The app uses it to read older files.
+display_name: {{display_name}}         # Your name as it appears on documents.
+headline: null                         # One line under your name, e.g. "Infrastructure automation engineer".
+location: null                         # City, State. e.g. "Austin, TX". null = leave it off.
+links: []                              # e.g. [{label: GitHub, url: https://github.com/you}]
+timezone: {{timezone}}                 # Used for dates and job ids. e.g. America/New_York
+template: classic                      # Document design. Available: classic
+template_version: null                 # null = newest. Old documents always keep the version they used.
+
+contact:                               # Your email and phone are NOT stored here or anywhere in your data.
+  email_secret: RB_CONTACT_EMAIL       # Name of the environment variable / Docker secret holding your email (set it in .env).
+  phone_secret: RB_CONTACT_PHONE       # Same for your phone. null = no phone on documents.
+
+tracker:
+  stale_days: 14                       # Flag an application when nothing has happened for this many days.
+
+writing:
+  answer_max_words: 100                # Limit for "Why do you want to work here?" answers.
+  cover_letter_min_words: 250
+  cover_letter_max_words: 350
+  banned_phrases:                      # Drafts using these fail the checks. Add your own pet peeves.
+    - proven record
+    - proven track record
+    - passionate about
+    - leverage
+    - leveraged
+    - synergy
+    - results-driven
+    - cross-functional teams
+    - team player
+
+snapshots:                             # Saved copies of documents, so any of them can be rebuilt exactly.
+  max_per_job_and_type: 10             # Older unsent copies beyond this are removed. Sent/pinned ones are always kept.
+  max_total: 1000
+
+backups:
+  keep: 30                             # How many database backups of each kind (before-change, daily) to keep.
+
+publish:
+  enabled: false                       # true when you want a public resume site from profiles/public.yaml.
+  target: null                         # Where it goes, e.g. "github.com/you/you.github.io". Informational for now.

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ user }} · resume-builder{% endblock %}
+{% block body %}
+<h1>{{ user }}</h1>
+<div class="card">
+  <h2>Sync status</h2>
+  <p>Last sync: {{ status.last_sync or "never" }}</p>
+  {% if status.files_needing_attention %}
+    <p class="bad">These files need attention. The app keeps using their last good version until they're fixed (details in SYNC-STATUS.md):</p>
+    <ul>{% for f in status.files_needing_attention %}<li><code>{{ f.file }}</code> ({{ f.result }})<ul>{% for p in f.problems %}<li>{% if p.line %}line {{ p.line }}: {% endif %}{% if p.field %}<code>{{ p.field }}</code>: {% endif %}{{ p.message }}{% if p.example %} <span class="muted">Example: {{ p.example }}</span>{% endif %}</li>{% endfor %}</ul></li>{% endfor %}</ul>
+  {% else %}<p class="ok">All files are in sync.</p>{% endif %}
+  {% if status.example_entries_left %}<p class="stale">Example entries still in base.yaml: {{ status.example_entries_left | join(", ") }}. Replace them with your own.</p>{% endif %}
+  {% if status.missing_contact_secrets %}<p class="stale">Contact details not set: {{ status.missing_contact_secrets | join(", ") }} (add them to .env).</p>{% endif %}
+  {% if status.event_drafts_waiting %}<p class="stale">{{ status.event_drafts_waiting }} proposed event(s) waiting for you: <code>rb event-drafts</code>.</p>{% endif %}
+  <p class="muted">Saved documents: {{ status.snapshots.count }} of {{ status.snapshots.limit }}{% if status.snapshots.near_limit %} <span class="stale">(near the limit)</span>{% endif %}</p>
+</div>
+<div class="card">
+  <h2>Upcoming actions</h2>
+  {% if actions.upcoming %}<table><tr><th>Due</th><th>Action</th><th>Job</th></tr>
+  {% for a in actions.upcoming %}<tr><td class="{{ 'bad' if a.overdue else '' }}">{{ a.next_action_due or "—" }}</td><td>{{ a.next_action }}</td><td><a href="/u/{{ user }}/jobs/{{ a.job_id }}">{{ a.job_id }}</a></td></tr>{% endfor %}</table>
+  {% else %}<p class="muted">None. Set <code>next_action</code> in an application.yaml to see it here.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Stale applications</h2>
+  {% if actions.stale %}<ul>{% for a in actions.stale %}<li><a href="/u/{{ user }}/jobs/{{ a.job_id }}">{{ a.job_id }}</a>: {{ a.stage }}, last event {{ a.last_event }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">Nothing stale.</p>{% endif %}
+</div>
+{% endblock %}

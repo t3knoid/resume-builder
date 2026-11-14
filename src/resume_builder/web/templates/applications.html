@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Applications · {{ user }}{% endblock %}
+{% block body %}
+<h1>Applications</h1>
+<div class="card">
+<form class="filters" method="get">
+  <label>Stage<select name="stage"><option value="">any</option>{% for s in stages %}<option {{ 'selected' if f.stage == s }}>{{ s }}</option>{% endfor %}</select></label>
+  <label>Company<select name="company"><option value="">any</option>{% for c in registry.companies %}<option value="{{ c.slug }}" {{ 'selected' if f.company == c.slug }}>{{ c.name }}</option>{% endfor %}</select></label>
+  <label>Department<select name="department"><option value="">any</option>{% for c in registry.companies %}{% for d in c.departments %}<option value="{{ d.slug }}" {{ 'selected' if f.department == d.slug }}>{{ c.name }} / {{ d.name }}</option>{% endfor %}{% endfor %}</select></label>
+  <label>Archived<select name="archived"><option value="false">hide</option><option value="true" {{ 'selected' if f.archived }}>show</option></select></label>
+  <input type="hidden" name="sort" value="{{ f.sort }}">
+  <button>Filter</button>
+</form>
+</div>
+<div class="card table-wrap">
+{% set q = "&stage=" ~ (f.stage or "") ~ "&company=" ~ (f.company or "") ~ "&department=" ~ (f.department or "") %}
+<table>
+<tr><th><a href="?sort=job_id{{ q }}">Job</a></th><th><a href="?sort=company{{ q }}">Company</a></th><th>Title</th><th><a href="?sort=stage{{ q }}">Stage</a></th><th><a href="?sort=applied{{ q }}">Applied</a></th><th><a href="?sort=next{{ q }}">Next action</a></th><th><a href="?sort=stale{{ q }}">Stale</a></th></tr>
+{% for a in apps %}
+<tr>
+  <td><a href="/u/{{ user }}/jobs/{{ a.job_id }}">{{ a.job_id }}</a></td>
+  <td><a href="/u/{{ user }}/companies/{{ a.company }}">{{ a.company }}</a>{% if a.department %} / {{ a.department }}{% endif %}</td>
+  <td>{{ a.title or "" }}</td>
+  <td><span class="pill stage-{{ a.stage }}">{{ a.stage }}</span></td>
+  <td>{{ a.applied_on or "—" }}</td>
+  <td>{% if a.next_action %}{{ a.next_action }}{% if a.next_action_due %} <span class="muted">({{ a.next_action_due }})</span>{% endif %}{% endif %}</td>
+  <td>{% if a.stale %}<span class="stale">stale</span>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="7" class="muted">No applications match. Start one with <code>rb new-job --company "Name"</code>.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../.schemas/profile.schema.json
+schema_version: 1
+summary: [sum-platform, sum-observability]
+roles:
+  role-fabrikam: [fab-ci-pipeline, fab-monitoring, fab-ansible]
+  role-tailspin: [tail-docker]
+projects:
+  proj-llm-lab: [lab-llm-server]
+education: [edu-bs]
+certifications: []
+skills: [sk-automation, sk-observability, sk-platforms]
+keywords: [github-actions, prometheus, python, docker]
+earlier_roles: {}
+omitted_roles: []
+gaps:
+  - skill: Kubernetes
+    note: Not in base.yaml. Real gap or missing information?

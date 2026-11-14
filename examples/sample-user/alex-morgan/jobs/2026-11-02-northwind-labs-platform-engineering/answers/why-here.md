@@ -1,0 +1,1 @@
+I want to work on an internal platform that many teams depend on, because making other engineers faster is the work I enjoy most. At Fabrikam I cut release time from 3 hours to 25 minutes by moving 14 services to GitHub Actions pipelines [cite: fab-ci-pipeline]. I also built Prometheus and Grafana monitoring for 60 hosts [cite: fab-monitoring].

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/organizations.schema.json
+#
+# COMPANIES AND DEPARTMENTS you've looked at, recorded once and reused. Job ids are built from
+# these slugs, and `rb new-job` offers them as choices. You rarely need to edit this by hand:
+# `rb new-job` adds new companies for you. Add aliases for other spellings you see in postings.
+# Deleting an entry archives it; applications that used it keep working.
+
+schema_version: 1
+
+companies:
+  - slug: example-co                   # lowercase-with-hyphens; used in job ids, never changes once used.
+    name: Example Co                   # Display name.
+    aliases: [Example Company, ExampleCo Inc.]   # Other spellings, so duplicates are caught.
+    website: null
+    notes: null                        # Anything worth remembering about them.
+    departments:
+      - slug: platform-engineering
+        name: Platform Engineering
+        aliases: []
+        notes: null

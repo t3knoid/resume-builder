@@ -1,0 +1,19 @@
+# yaml-language-server: $schema={{schema_prefix}}.schemas/profile.schema.json
+#
+# YOUR PUBLIC RESUME: which items from base.yaml to show, and in what order. Ids only, no text.
+# Right now it selects the examples, so `rb render public --preview` shows a sample straight away.
+# Replace the ids with your own as you fill in base.yaml.
+
+schema_version: 1
+summary: [example-summary]             # summary phrase ids, in order
+roles:                                 # role id -> bullet ids, in order. Newest role first.
+  example-role: [example-bullet-patching, example-bullet-monitoring]
+projects:
+  example-project: [example-bullet-homelab]
+education: [example-degree]
+certifications: []
+skills: [example-skills-automation]    # skill group ids, in order
+keywords: []                           # tags this resume claims (each must be a tag in base.yaml)
+earlier_roles: {}                      # older roles condensed into one "Earlier Experience" entry: {old-job: []}
+omitted_roles: []                      # roles left out on purpose: - {role: old-job, reason: older than 15 years}
+gaps: []                               # things a posting asks for that you don't have: - {skill: kubernetes, note: ...}

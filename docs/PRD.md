@@ -1,0 +1,576 @@
+# Product Requirements: resume-builder
+
+*November 13, 2026. Status: **approved**, after a consistency review. Last updated November 14, 2026. Changes are recorded in [CHANGELOG.md](../CHANGELOG.md).*
+
+---
+
+## 1. Summary
+
+resume-builder helps a job seeker do two things:
+
+1. **Tailor honestly.** Keep one complete, evidence-backed record of their career. For each job, produce a resume that selects and orders that record. The AI can choose and rank content but cannot invent claims.
+2. **Track applications.** Record every application from first interest to final outcome in a small SQLite database. A local website shows the full history of each application, including which resume version was sent.
+
+It is structured from day one so that anyone can use it by adding their own content folder, without touching code and without their data mixing with anyone else's.
+
+## 2. Problem
+
+- **One resume for every job hides the most relevant evidence.** Tailoring by hand is slow, so people skip it.
+- **AI tailoring makes claims up.** It inflates experience, invents tools and metrics, and drifts into generic corporate language. Most users can't easily tell what the AI added.
+- **Job searches are hard to keep track of.** After 20+ applications, people lose track of what they sent, to whom, when they last heard back and what happened. Spreadsheets break down, and nothing ties the outcome back to the resume that was sent.
+- **Nothing links tailoring to results.** Job seekers can't answer "which version of my resume gets interviews?"
+
+## 3. Goals
+
+| #  | Goal                                                                                                                            | Measured by                                                                                                            |
+| -- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| G1 | Tailored resume (plus optional cover letter and "why here" answer) from a pasted posting in under 15 minutes of the user's time | Time from `posting.md` created to PDF approved                                                                         |
+| G2 | Zero invented claims                                                                                                            | Validator passes; every rendered line traces back to a content library id                                              |
+| G3 | Every application tracked from start to outcome                                                                                 | Share of applications with a final status or a dated next action                                                       |
+| G4 | The user can see the full history of any application                                                                            | Timeline view shows every status change, the resume sent and contacts                                                  |
+| G5 | A new user can onboard by adding content only                                                                                   | New user gets a first PDF without editing any file outside `data/<user>/`, apart from copying `.env.example` to `.env` |
+| G6 | Users learn from their own search                                                                                               | Dashboard shows response rate, time to response and stage conversion                                                   |
+
+## 4. Users
+
+- **Primary: technical job seekers.** Comfortable with YAML, git and the command line. Running an active search, want editorial control over AI output and strict honesty in what they send.
+- **Possible later: reviewers.** Career coaches, mentors or friends who read and comment on a user's materials without changing them (enabled by RBAC, section 9.2).
+
+The first real user is onboarded through the same path as any other user (`init-user`, then their own `data/<user>/` folder). The product has no special cases for any user.
+
+## 5. Product principles
+
+1. **The user's evidence is the only source of claims.** If it isn't in the user's content library, it isn't on the resume.
+2. **AI advises; the user decides.** Every AI output is reviewed before use.
+3. **Content and code are separate.** Code never contains a user's name, employer, contact details or job data. Everything specific to one user lives in that user's data folder and database.
+4. **Local-first and private by default.** Job data, tracker data and the tracker website never reach a public location unless the user explicitly publishes something.
+5. **YAML in, SQLite as the record.** Users enter data by editing readable YAML and Markdown files. Once validated and synced, that data lives in SQLite, which is the app's only source of truth (section 8.7).
+6. **Everything goes through the API.** Every read and write of user data goes through one service API that checks permissions. No part of the app opens a data file or runs SQL directly (section 9).
+
+## 6. Scope
+
+### 6.1 What the app does
+
+- Folder layout separated by user (section 8.1), with a fictional example user for tests and docs.
+- Dockerfile and `compose.yaml` with the data, database, output and backup mounts (section 11). The app runs in Docker from the first milestone.
+- `bootstrap` script that finds, creates and repairs user folders on every start, with self-explanatory seeded files and smart defaults (section 8.10). `init-user` and `new-job` commands. A `user.yaml` holding everything that differs between users: display name, publish target, names of the contact-detail secrets, template, limits and thresholds.
+- Core architecture (section 9): domain models, service API with request context and permission checks, SQLite storage with schema migrations, generated HTTP API, CLI as a thin client.
+- **YAML sync** (section 8.7): validated, change-aware sync of the user's YAML and Markdown input into SQLite, write-back of app changes to the files, conflict detection, automatic database backups.
+- Content library with ids, tags, metrics, evidence and limits.
+- For each job: posting, AI-generated profile, fit report, application record.
+- Validator, renderer, ATS-friendly HTML and PDF output (WeasyPrint).
+- Cover letter and "Why do you want to work here?" drafts built from the tailored resume (section 8.9).
+- Read-only local tracker website: application list, history for each application, basic dashboard, sync status.
+- Optional public resume site: render the public profile and export it as a static site. Pushing it to the publish target in `user.yaml` (for example a GitHub Pages repo) is milestone 6.
+- A user manual and a quick-start guide (`docs/USER-MANUAL.md`, `docs/QUICKSTART.md`), written around the example user.
+- **No built-in AI model.** The AI agent is an outside tool the user runs. It always acts as the `agent` actor (B7, DK13) through one of three channels, each going through the operation registry and the same checks:
+  - **MCP server** (`rb mcp`, stdio): tools generated from the registry, filtered to the agent role's permissions. Works with MCP clients such as Claude Code, Claude Desktop, Gemini CLI, Codex CLI and GitHub Copilot in VS Code.
+  - **Copy and paste** for chat-only assistants: `rb brief` / `rb agent-instructions` produce the text to paste; `rb propose` submits each returned block as the agent.
+  - **HTTP API** with an agent token, for scripts.
+  - Per-assistant setup instructions are in `docs/AI-AGENTS.md`.
+
+### 6.2 Building on resume-builder
+
+Other packages can embed or extend the app through the interfaces described in [ARCHITECTURE.md](ARCHITECTURE.md), without changing this code. To keep that possible:
+
+- Don't let any code path assume a single user per process or read user data outside a request context.
+- Don't add file-only features without an operation behind them; a host may have no user files.
+- Keep the honesty checks in our own code (not in prompts), so they apply to any AI agent.
+- When an outside package needs something the app doesn't offer, add a generic extension point, not a special case.
+
+## 8. Functional requirements
+
+### 8.1 Folder layout and separating users
+
+| Id | Requirement |
+| --- | --- |
+| R1.1 | Every command acts on one user (`--user <name>`, defaulting to `RB_DEFAULT_USER`) and reads and writes only that user's folder and database. |
+| R1.2 | No code path reads another user's folder or database. Ids only need to be unique within one user. |
+| R1.3 | **Job id format:** `YYYY-MM-DD-<company>[-<department>]`. The date is the day the job was first entered, in the user's time zone. Company and department are the slugs of the organization shown in the job description, taken from the organization registry (section 8.11). Example: `2026-11-13-acme-corp-platform-engineering`.<br>• The app builds the id from the date, company and department. The user picks those values; they never type the id by hand.<br>• Each slug is lowercase letters, digits and hyphens. The whole id is at most 80 characters, with the department slug shortened first if needed.<br>• If the same id already exists for that user, the app adds `-2`, `-3` and so on.<br>• The id never changes after creation, even if the company or department is later corrected. The application record keeps the current values.<br>• Job ids contain employer names, so they follow the privacy rules for employer names (section 10). |
+| R1.4 | The data folder holds only text: the user's input files and the app's write-back of current data (R7.12). The database in `/db` is the source of truth and holds everything else, including snapshots and the audit log. Rendered PDFs and HTML are never stored (section 8.12). |
+| R1.5 | Tests, docs and examples use only the fictional `examples/sample-user/`. Real user data never appears in tests, fixtures, docs or code. |
+| R1.6 | No user gets special treatment in code. A need that comes from one user becomes a generic feature, configured in `user.yaml`, or it stays in that user's data. |
+| R1.7 | The four roots are set by environment variables: `RB_DATA_ROOT`, `RB_DB_ROOT`, `RB_OUTPUT_ROOT` and `RB_BACKUP_ROOT`. In the container they default to `/data`, `/db`, `/output` and `/backups`. User data never has to live inside the code repo (section 11). |
+
+**Code repo** (contains no user data):
+
+```text
+resume-builder/
+  CLAUDE.md
+  Dockerfile
+  compose.yaml              # volumes, localhost-only port, secrets
+  .dockerignore             # keeps data/, output/, backups/ and secrets out of the image
+  docs/                     # PRD, user guide
+  src/                      # shared code: no user content
+    resume_builder/
+      templates/            # shared resume and letter templates, plus the seed templates (packaged)
+      migrations/           # versioned SQLite schema migrations (packaged)
+  examples/
+    sample-user/            # fictional user: same layout as a user data folder, used by tests and docs
+  tests/
+  data/                     # default host location for user data (gitignored)
+  output/                   # default host location for exports (gitignored)
+  backups/                  # default host location for database backups (gitignored)
+```
+
+**Container mounts** (section 11):
+
+```text
+/data     ← bind mount of the host data folder      user input files (YAML/Markdown), one folder per user
+/db       ← named Docker volume                      SQLite databases, the source of truth, one per user
+/output   ← bind mount of the host output folder     temporary exports of rendered PDFs/HTML (disposable)
+/backups  ← bind mount of the host backups folder    database backups (automatic and on demand)
+```
+
+**One user's files:**
+
+```text
+/data/
+  <user>/                   # input and working copies; can be its own private git repo
+    .schemas/               # generated JSON Schemas for this user (they include the user's registry slugs)
+    START-HERE.md           # short checklist
+    SYNC-STATUS.md          # written by the app: last sync result and any problems, file by file
+    user.yaml               # settings: display name, publish target, secret names, template, limits
+    base.yaml               # content library input (BASE CV + evidence)
+    organizations.yaml      # companies and their departments, reused across jobs
+    profiles/
+      public.yaml           # selection for the public site
+    jobs/
+      <job-id>/
+        posting.md          # pasted posting text
+        application.yaml    # tracker record and event log
+        profile.yaml        # working copy of the AI-generated selection (ids only)
+        fit-report.md       # working copy of the fit report
+        cover-letter.md     # optional: working copy of the drafted letter
+        answers/
+          why-here.md       # optional: working copy of the "Why do you want to work here?" answer
+/db/
+  <user>/
+    app.db                  # SQLite: source of truth for everything, including snapshots, audit log and sync state
+/backups/
+  <user>/                   # timestamped copies of app.db
+/output/
+  <user>/
+    <job-id>/               # temporary PDF/HTML exports, rebuilt from snapshots on demand
+    public/
+```
+
+### 8.2 Content library (`base.yaml`)
+
+| Id | Requirement |
+| --- | --- |
+| R2.1 | Contains summary phrases, roles, bullets, projects (including personal or lab work, with dates), education, certifications and skills. |
+| R2.2 | Every bullet has: `id`, `text`, `tags`, `metric` (null until the user supplies one), `evidence`, `limits`, `status` (`draft` \| `confirmed`). |
+| R2.3 | Only `confirmed` bullets can appear in a rendered resume. The one exception is a **preview** (`render --preview`), which also includes drafts and prints "PREVIEW: contains draft content" on every page. Preview snapshots can never be approved, sent or published. |
+| R2.4 | `evidence` and `limits` are never rendered. |
+
+### 8.3 Tailoring
+
+| Id | Requirement |
+| --- | --- |
+| R3.1 | The user adds `posting.md`. The AI produces a profile (ids and order only) and a fit report through the API. Both are stored in the database and written back as `profile.yaml` and `fit-report.md` for review. |
+| R3.2 | The fit report lists strong matches, weak spots, gaps, questions for the user, and notes on the role. |
+| R3.3 | Each gap gets a decision from the user: a real gap, or missing information to add to the content library as a draft. |
+
+### 8.4 Content rules
+
+These rules apply to every write, whether it arrives through YAML sync (section 8.7) or the API.
+
+| Id | Requirement |
+| --- | --- |
+| R4.1 | Every referenced id exists and is `confirmed`. |
+| R4.2 | Every keyword the profile claims maps to a tag in the content library. |
+| R4.3 | A profile contains no free text, except in `gaps`. |
+| R4.4 | Roles stay in chronological order. A role is left out only if it is listed in `omitted_roles` with a reason. |
+| R4.5 | Each application matches its schema, its event dates run in order, and its status transitions are allowed (section 8.6). |
+
+### 8.5 Rendering
+
+| Id | Requirement |
+| --- | --- |
+| R5.1 | The content library plus a profile produces resume HTML, then the ATS HTML, then a PDF. |
+| R5.2 | Contact details come from secrets or environment variables named in `user.yaml`. They are never committed or stored. |
+| R5.3 | Every render first creates a snapshot (section 8.12). Its id is the resume version id, so a submission can be traced to exactly what was sent and rebuilt exactly. |
+| R5.4 | Golden-file tests render the example user's profiles and compare the result with expected HTML. |
+| R5.5 | Templates contain no user content. Name, headings and contact details come from `user.yaml` and secrets. |
+| R5.6 | Rendering reads only from the database (through the API), never from the YAML files directly. |
+
+### 8.6 Application tracker
+
+Each application is stored in the database with fixed fields plus an **append-only event log**. `application.yaml` is the way the user enters and edits it. The history view is built from the event log in the database.
+
+#### Application fields
+
+| Group      | Fields                                                                                                                                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Posting    | company and department (references to the organization registry, section 8.11), title, posting URL, source (LinkedIn, referral, company site, recruiter), external posting id, location, work arrangement (remote/hybrid/onsite), salary range as posted, date posted, closing date |
+| Fit        | summary of matched requirements and gaps (from the fit report), user's interest level (1–5), `interest_notes` (why the user wants this job; the only source of motivation in letters and answers)                                                                                   |
+| Submission | date applied, how they applied, snapshot ids of the resume, cover letter and application answers that were sent (section 8.12), referral contact                                                                                                                                    |
+| Status     | current stage (derived from the latest event), next action and its due date, final outcome and reason                                                                                                                                                                               |
+| People     | contacts: name, role (recruiter, hiring manager, interviewer, referrer), channel, notes                                                                                                                                                                                             |
+| Notes      | free-form notes. Never rendered on a resume.                                                                                                                                                                                                                                        |
+
+#### Lifecycle stages
+
+```text
+interested → tailoring → applied → acknowledged → screening → interviewing → offer → accepted
+                                                                                  ↘ declined
+From any open stage                  → withdrawn
+From applied or any later open stage → rejected | ghosted
+```
+
+`accepted`, `declined`, `rejected`, `withdrawn` and `ghosted` are final. A final stage can be left only by a correction event (R6.4).
+
+| Id | Requirement |
+| --- | --- |
+| R6.1 | Each event has: date, type (stage change, interview, follow-up sent, message received, note, document sent), and optional stage, contact, notes and linked documents. |
+| R6.2 | Interview events record round, format (phone, video, onsite, take-home), interviewers and the user's own assessment. |
+| R6.3 | An application is flagged **stale** when it has had no event for N days (default 14, set in `user.yaml`). The user decides whether to mark it `ghosted`. The system never changes a stage by itself. |
+| R6.4 | Events are never edited in place to change history. A correction is recorded as a new event that refers to the old one. Sync rejects YAML edits that change or remove an event already in the database (R7.9). |
+| R6.5 | The AI never makes up events, dates or contacts. It may draft an event from something the user pastes (for example a rejection email), for the user to confirm. |
+
+### 8.7 SQLite database and YAML sync
+
+SQLite is the source of truth. The user's YAML and Markdown files are the input channel: changes in them are validated and then synced into the database. After a successful sync, the app uses only the database.
+
+#### Database
+
+| Id | Requirement |
+| --- | --- |
+| R7.1 | Each user has one SQLite database, `/db/<user>/app.db`. It holds all application data: content library, organizations, profiles, applications, events, contacts, letters and answers, snapshots, the audit log and sync state. |
+| R7.2 | Main tables: `content_items` (summary phrases, roles, bullets, projects, skills), `companies`, `departments` (each belongs to a company), `profiles`, `applications` (references company and department), `events`, `contacts`, `documents` (letters, answers, fit reports), `snapshots` (canonical JSON plus id, job, document type, created time, protection), `snapshot_bullets`, `audit_log`, `sync_files` (one row per input file: path, last-synced content and hash, schema version, time, result), `sync_runs`. |
+| R7.3 | Integrity is enforced in the database as well as in code: foreign keys on, `CHECK` constraints for every allowed value (stages, statuses, event types), `UNIQUE` constraints on ids within a user, `NOT NULL` where a field is required. SQLite runs in WAL mode. |
+| R7.4 | The schema is versioned. Migrations in `src/resume_builder/migrations/` run automatically at startup, after a backup, and never lose data. `doctor` runs SQLite's integrity check. |
+
+#### When sync runs
+
+| Id | Requirement |
+| --- | --- |
+| R7.5 | Sync runs:<br>• at startup, as part of `bootstrap`<br>• while the app is running, whenever an input file changes (a file watcher, falling back to polling every few seconds where file events don't cross the Docker mount)<br>• before any CLI command that reads data, if a file changed since the last sync<br>• on demand with `sync` (`sync --check` validates without applying) |
+| R7.5a | Only one sync runs at a time for a user. A per-user lock stops the watcher and a CLI command from syncing at once; the second one waits, then finds nothing to do. |
+| R7.6 | **Change detection:** each input file's content hash is compared with the hash stored at its last successful sync. Unchanged files are skipped, so sync is fast and does nothing when nothing changed. |
+
+#### Validation before anything reaches the database
+
+| Id | Requirement |
+| --- | --- |
+| R7.7 | Each changed file passes these stages in order. A file that fails any stage is not applied.<br>1. **Safe reading:** UTF-8 only; size limit per file (default 1 MB); YAML read with a safe loader (no custom tags, no code execution); duplicate keys rejected; limits on nesting depth and alias expansion, so a malformed or hostile file can't exhaust memory; control characters rejected.<br>2. **Schema:** the file matches the schema generated from the domain models (A3): required fields, types, allowed values, id and slug patterns, ISO dates, maximum text lengths. Older `schema_version` values are migrated in memory first.<br>3. **Content rules:** the rules in section 8.4 and R1.3.<br>4. **References:** every referenced id, company and department exists, checked against the database plus the other files in the same sync run.<br>5. **History rules:** no change or removal of events already in the database (R6.4); no change of an existing job id (R1.3).<br>6. **Merge check:** a three-way comparison against the last-synced version of the file and the current database (R7.11).<br>7. **Database dry run:** the changes are applied inside a transaction so database constraints (R7.3) are checked too. The transaction commits only if everything passes. |
+| R7.8 | **Unit of sync:** each file is applied as a whole or not at all, in dependency order (`user.yaml`, `organizations.yaml`, `base.yaml`, profiles, then jobs). If a file fails, the database keeps that file's last good state and other valid files still sync. A file that depends on a failed file's new content waits until the failure is fixed. |
+| R7.9 | **Error reporting:** every problem names the file, line and field, says what's wrong in plain words, and shows a valid example (R10.16). Problems appear in the CLI output, in `SYNC-STATUS.md` in the user's folder, and as a banner on the tracker website. A failed sync never stops the app; it keeps serving the last good data. |
+
+#### Deletions and history
+
+| Id | Requirement |
+| --- | --- |
+| R7.10 | Removing an entry from a YAML file archives it in the database; it does not delete it. Archived content can't be selected for new documents but stays in existing snapshots and history. Permanent deletion is a separate, confirmed command and is audited. Deleting a job folder is reported, not applied; `archive-job` and `delete-job` do that explicitly. |
+
+#### Changes made by the app
+
+| Id | Requirement |
+| --- | --- |
+| R7.11 | **No silent overwrites:** sync applies only the changes the user made in a file since its last sync (three-way merge). If the user changed a field in YAML that the app also changed in the database since then, sync stops for that file and reports the conflict with both values. The user resolves it by editing the file. |
+| R7.12 | **Write-back:** when data changes through the API (the agent drafting a profile, `new-job`, a CLI command, any other interface), the app updates the matching YAML or Markdown file right away. It keeps comments, key order and formatting (R10.15). The files therefore always show the current data, so the user edits from an up-to-date copy. Write-back updates the stored last-synced hash so the change isn't read back in as a user edit. |
+| R7.13 | Before any sync or migration that changes data, the app backs up the database automatically to `/backups/<user>/` (section 11.2). |
+
+#### Recovery
+
+| Id | Requirement |
+| --- | --- |
+| R7.14 | If the database is lost, `restore` brings back a backup, and the next sync re-applies any newer edits from the YAML files. `import --fresh` builds a new database from the YAML files alone. Snapshots, the audit log and archived items can't be rebuilt that way, which is why backups are automatic. |
+
+### 8.8 Tracker website (local, read-only)
+
+| Id | Requirement |
+| --- | --- |
+| R8.1 | Runs on localhost only and is never deployed publicly. |
+| R8.2 | **Applications list:** filter and sort by stage, company, department, date applied, next action, stale flag. The company and department filters are pick-lists from the organization registry. |
+| R8.3 | **Application detail:** posting summary, contacts, and a timeline of every event. Shows the resume, letter and answer versions sent, each with a button that rebuilds the PDF from its snapshot and downloads it. Also a list of every snapshot for the job, a text diff between any two, and a view of the profile's differences from the public profile. |
+| R8.4 | **Dashboard:** applications per week, response rate, median days to first response, conversion between stages, outcomes by source, response rate with and without a cover letter, and the bullets and tags that appear most often in resumes that reached interviews. |
+| R8.5 | **Upcoming actions:** next actions sorted by due date; stale applications. |
+| R8.6 | **Company view:** every application to one company (and its departments) over time, so the user can see past contact before applying again. |
+| R8.7 | **Sync status:** time of the last sync, files waiting on a fix, conflicts and how to resolve them. |
+
+### 8.9 Cover letters and application answers
+
+For any job with a tailored profile, the user can ask for a cover letter, a short answer to "Why do you want to work here?", or both. Each one makes the case for fit using **the tailored resume for that job**, not the whole content library.
+
+#### Where content may come from
+
+| Id | Requirement |
+| --- | --- |
+| R9.1 | Evidence about the candidate comes only from the confirmed bullets and summary phrases selected in that job's profile. If a point isn't on the tailored resume, it isn't in the letter or answer. |
+| R9.2 | Facts about the employer and role come only from the posting and the user's own notes in the application (`interest_notes`: why they want this job, what they know about the company). The AI does not add company facts from anywhere else. |
+| R9.3 | The candidate's motivation ("why I want this") comes only from `interest_notes`. If the notes are empty, the AI asks the user and does not make up enthusiasm. A draft can still be produced, with a marked placeholder where the motivation goes. |
+
+#### Short answer: "Why do you want to work here?"
+
+| Id | Requirement |
+| --- | --- |
+| R9.4 | Brief: 100 words or fewer by default (`answer_max_words` in `user.yaml`), plain prose, no headings or bullet points. |
+| R9.5 | Shape: one sentence on why this role and employer (from R9.2 and R9.3), then one or two sentences linking the posting's top requirements to the strongest evidence on the tailored resume, with a metric where one exists. |
+| R9.6 | Stored as an application answer with the question text, so other common questions ("Tell us about a project you're proud of", "Why are you a good fit?") can be added later with no change to the model. |
+
+#### Cover letter
+
+| Id | Requirement |
+| --- | --- |
+| R9.7 | 250–350 words by default (`cover_letter_max_words` in `user.yaml`), three or four short paragraphs: why this role, two or three pieces of evidence mapped to the posting's main requirements, a short close. |
+| R9.8 | Rendered to PDF with the same template and contact details (from secrets) as the tailored resume, as `<Name>_Cover_Letter_<job-id>.pdf`, always rebuilt from its snapshot (section 8.12). |
+
+#### Honesty checks (both document types)
+
+| Id | Requirement |
+| --- | --- |
+| R9.9 | Every sentence that makes a claim about the candidate cites the bullet ids it rests on, with a marker at the end of the sentence: `[cite: bullet-id, other-id]`. Citations are stored with the draft and stripped when rendering. |
+| R9.10 | The validator fails a draft when a cited id isn't in the job's profile or isn't confirmed; when a number, tool or technology in the text doesn't appear in a cited bullet; when a claim sentence has no citation; or when the text is over its word limit. |
+| R9.11 | The writing style rules apply (no "proven record", "passionate about", "leverage" and the like). Phrases on a banned list in `user.yaml` fail validation. |
+
+#### Review and tracking
+
+| Id | Requirement |
+| --- | --- |
+| R9.12 | The agent can only create drafts. The owner approves (or edits and approves) before a letter or answer can be marked as sent. Owner edits made in the working-copy file sync back like any other input. If they add text that doesn't trace back to a bullet, the validator shows warnings but does not block, and the warnings are recorded on the version. |
+| R9.13 | Every approved letter and answer gets a version id, which is its snapshot id (section 8.12). The application and its `applied` event record which versions were sent, next to the resume version id. |
+| R9.14 | If the tailored profile changes after a letter or answer was approved, that letter or answer is flagged as out of date. |
+
+### 8.10 First run, discovery and seeded files
+
+The app sets up and checks user folders by itself. Seeded files explain themselves, so a user can fill them in without reading separate documentation.
+
+#### Bootstrap script
+
+| Id | Requirement |
+| --- | --- |
+| R10.1 | A `bootstrap` script runs every time the server container starts, before the server starts (DK14). One-off CLI containers skip the full bootstrap and run only migrations and the quick sync in R7.5. It can also be run by hand (`bootstrap`, or `doctor` for a check-only mode that changes nothing). |
+| R10.2 | It checks that `/data`, `/db`, `/output` and `/backups` exist and are writable. If one isn't, it stops with a plain message saying which mount is wrong and how to fix it. |
+| R10.3 | **Discovery:** every folder directly under `/data` that contains a `user.yaml` is a user space. Folders starting with `.` or `_` are ignored. A folder without `user.yaml`, or with a name that isn't a valid slug (lowercase letters, digits, hyphens), is reported, not changed. |
+| R10.4 | **First run:** if no user space exists, the script creates one named by `RB_DEFAULT_USER` (set in `.env`; the seeded `.env.example` sets it). If that variable isn't set, it creates nothing and prints the exact command to run. |
+| R10.5 | **Repair:** for each user space found, the script creates any missing folders (`profiles/`, `jobs/`) and seed files, the user's database (with migrations applied), and the matching `/output/<user>/` and `/backups/<user>/` folders. |
+| R10.6 | **Never destructive:** the script never overwrites, moves or deletes an existing file. Running it again changes nothing (it is idempotent). |
+| R10.7 | **Sync and report:** it then runs a sync (R7.5) and ends with a short summary per user: created, already present, sync result, problems found (validation errors, conflicts, example entries still in place, missing contact secrets, snapshot limits nearly reached, a newer seed template version available). The same summary appears in `SYNC-STATUS.md` and on the tracker website's home page. |
+| R10.8 | It goes through the service API like every other interface (A1), as a `system` actor whose only permissions are `space:init`, `space:check` and `space:sync`. Everything it creates is recorded in the audit log. |
+
+#### Commands for adding things
+
+| Id | Requirement |
+| --- | --- |
+| R10.9 | `init-user <name>` creates a new user space from the seed. `new-job` asks for the company and department, offering existing registry entries first (section 8.11). It then builds the job id (R1.3), creates the application in the database and writes a job folder with a seeded `posting.md` and `application.yaml`, already set to stage `interested` with today's date. `new-job --company <name> --department <name>` skips the questions. |
+
+#### Seeded files that explain themselves
+
+| Id | Requirement |
+| --- | --- |
+| R10.10 | Every seeded YAML file starts with a short header comment: what the file is for, what to do first, and what happens if a field is left empty. |
+| R10.11 | Every field has a comment on its line or just above it, giving its meaning, allowed values (for example every lifecycle stage) and a short example. Optional fields are present with `null` or an empty list, not left out, so the user can see everything that's possible. |
+| R10.12 | **Smart defaults** fill in everything that has a sensible default:<br>• `user.yaml`: stale threshold 14 days, answer limit 100 words, cover letter limit 350 words, default template, a starter list of banned phrases, publishing turned off, snapshot limits (R12.9), backup retention (R7.13), standard secret names (`RB_CONTACT_EMAIL`, `RB_CONTACT_PHONE`), time zone from the container.<br>• `base.yaml`: the full skeleton of every section, with one worked example in each (a summary phrase, a role with two bullets, a project, a skill group), using `example-` ids.<br>• `organizations.yaml`: one example company with one department, showing the name, slug, aliases and notes fields.<br>• `profiles/public.yaml`: selects the examples, so the very first `render --preview` produces a working sample resume (R2.3).<br>• Job `application.yaml`: stage, today's date, the event log with its first event, and every optional field from section 8.6.<br>• Job `posting.md`: headings for the posting text, the source URL and the user's notes, each with a one-line hint. |
+| R10.13 | Example entries are `status: draft`, so they can never appear in a real resume. The validator and the bootstrap report list any `example-` entries still in place until the user replaces or deletes them. |
+| R10.14 | **Editor help:** each seeded YAML file begins with a `yaml-language-server` schema line that points to JSON Schemas generated from the domain models (A3), which bootstrap writes to `/data/<user>/.schemas/`. Schemas are per user because they list that user's registry slugs (R11.3). Editors such as VS Code then offer autocomplete, allowed values and error highlighting as the user types, catching most problems before sync does. |
+| R10.15 | **Comments survive app writes:** write-back (R7.12) keeps comments, key order and formatting when it updates a YAML file, so the explanations are never lost. |
+| R10.16 | **Error messages explain the fix:** validation errors name the file, line and field, say what's wrong in plain words, and give an example of a valid value. |
+| R10.17 | Each user space gets a `START-HERE.md`: a checklist of five or fewer steps (fill in `user.yaml`, replace the examples in `base.yaml`, add a job, render, open the tracker). It is a checklist, not a manual. |
+| R10.18 | Seed templates live in `src/resume_builder/templates/seed/` in the code repo and carry a `schema_version`. The fictional `examples/sample-user/` is built from the same seed, filled with fictional content, so the seed is always tested. |
+
+### 8.11 Organization registry (companies and departments)
+
+Companies and departments are recorded once and reused. This keeps job ids consistent and gives every company field a pick-list.
+
+| Id | Requirement |
+| --- | --- |
+| R11.1 | Each user has an organization registry. Each company has a display name, slug, aliases (other spellings seen in postings, such as "ACME" or "Acme Corp."), optional website and notes, and a list of departments. Each department has the same fields. |
+| R11.2 | The registry lives in the database (`companies` and `departments` tables). `organizations.yaml` is its input file and is kept current by write-back, so entries added through `new-job` appear there too. All access goes through the service API (A1). |
+| R11.3 | **Recall as a field selector:** wherever a company or department is entered, the app offers existing entries from the database first:<br>• CLI (`new-job`): a numbered pick-list, matched against names and aliases as the user types, with "add new" as the last option.<br>• YAML editing: the generated JSON Schema (R10.14) lists the registry slugs as allowed values for `company` and `department`, so the editor offers them in autocomplete. The schema is regenerated whenever the registry changes.<br>• Website filters: drop-down lists from the registry. |
+| R11.4 | **No accidental duplicates:** a new name that closely matches an existing name or alias (ignoring case, punctuation and suffixes such as Inc, LLC or Corp) triggers "Did you mean …?" before a new entry is created. |
+| R11.5 | A new company or department can be created on the fly while adding a job. It is added to the registry right away. |
+| R11.6 | Renaming a company or department updates its display name everywhere. Existing job ids keep their original slug (R1.3), and the old name is kept as an alias. |
+| R11.7 | Merging two entries (for example, duplicates found later) moves every application to the surviving entry, keeps the other name as an alias, and is recorded in the audit log. |
+| R11.8 | The agent may suggest a company and department from a pasted posting, offering an existing registry entry first. The user confirms the choice before the job is created. |
+
+### 8.12 Document snapshots and exact regeneration
+
+Every document the app produces can be rebuilt later exactly as it was, even after the content library, the profile or the templates have changed. The app keeps the text needed to rebuild a document, never the PDF or HTML itself.
+
+#### What a snapshot is
+
+| Id | Requirement |
+| --- | --- |
+| R12.1 | Every time the app produces a document, it first saves a **snapshot**: the complete, resolved input needed to render it. This covers resumes, cover letters, application answers, fit reports, profiles and the public site. |
+| R12.2 | A snapshot contains:<br>• the final text of every section, in render order: name, summary, every role and bullet as it read at that moment, skills, education, letter paragraphs, answer text<br>• the source references: bullet ids, content hashes of the profile and content library, and the organization entries used<br>• the template id and exact template version<br>• render settings: page size, fonts, and the ATS or styled variant<br>• the app version and Docker image digest<br>• the time it was created, the actor that created it and the reason (draft, approved, sent, public publish) |
+| R12.3 | A snapshot never contains contact details or secrets. It records which secret names were used and a one-way fingerprint of their values. Regeneration uses the current values. If the fingerprint doesn't match, the user is told that the contact details have changed since the original. |
+| R12.4 | Snapshots are stored in the database as canonical JSON (sorted keys, fixed formatting). The snapshot id is the hash of that content, so identical inputs give the same id and are stored once. Database backups include them. |
+| R12.5 | A snapshot is never edited after it is written. Approving or sending a document records that against the snapshot id; it does not change the snapshot. |
+
+#### Exact regeneration
+
+| Id | Requirement |
+| --- | --- |
+| R12.6 | `regenerate <snapshot-id>`, the website, and the API rebuild a document from its snapshot alone, without reading the current content library, profile or registry. The result is returned to the user as a download or written to `/output` for export. It is never kept by the app. |
+| R12.7 | **"Exactly the same" means:**<br>• The text and layout are always identical: every released template version stays in the image unchanged, and the snapshot names the version to use.<br>• With the same image version, the PDF is byte-for-byte identical. PDF metadata such as the creation date comes from the snapshot, not the current time, and rendering avoids anything random. A test checks this on every build.<br>• With a newer image, the text and template are still identical, but font or renderer updates could shift layout slightly. The app says so before rebuilding, and names the image version that produced the original. |
+| R12.8 | **Moment in time:** the user can ask for a document "as of" a date. The app picks the latest snapshot of that document created at or before that time. |
+
+#### Storage limit
+
+| Id | Requirement |
+| --- | --- |
+| R12.9 | Limits are set in `user.yaml`, with seeded defaults: at most 10 snapshots per document type per job (`snapshots.max_per_job_and_type`) and at most 1,000 per user (`snapshots.max_total`). |
+| R12.10 | Snapshots referenced by a sent application, the current public site, or a user's manual pin are **protected**. They are never deleted automatically and don't count toward the per-job limit. |
+| R12.11 | When a limit is reached, the oldest unprotected snapshot of that job and type is deleted (for the total limit, the oldest unprotected snapshot overall). The deletion is recorded in the audit log, and bootstrap reports how close each user is to the limit. |
+| R12.12 | If the total limit is reached and every snapshot is protected, the new document is not created. The user gets a clear message to raise the limit or unpin something. The app never silently fails to keep a snapshot of a document it produced. |
+| R12.13 | The user can pin, unpin and delete snapshots by hand. Deleting a protected snapshot requires an explicit confirmation and is audited. |
+
+#### Rendered files are not stored
+
+| Id | Requirement |
+| --- | --- |
+| R12.14 | PDFs and HTML are rendered on demand from snapshots. `/output` is a disposable export folder: the app never reads from it, never relies on it, and offers a `clean-output` command. Deleting it loses nothing. |
+| R12.15 | Documents shown in the tracker website are rendered on the fly from snapshots and streamed to the browser, without writing files. |
+
+## 9. Application architecture
+
+### 9.1 Layers: one API in front of all data
+
+```text
+Interfaces    CLI · tracker website · HTTP API · AI agent · bootstrap
+                  │   call service operations only
+Service API   ContentService · ProfileService · LetterService · RenderService · ApplicationService
+              ReportService · SnapshotService · SyncService
+                  │   every call: request context → authorize → validate → act → audit
+Storage API   Repositories: Content · Organization · Profile · Application · Document · Snapshot · Audit · SyncState
+                  │
+Backend       SQLite (source of truth)
+
+Sync adapter  YAML/Markdown files in /data  ⇄  SyncService
+              (the only code that reads or writes user files: import with validation, write-back with comments kept)
+```
+
+| Id | Requirement |
+| --- | --- |
+| A1 | All reads and writes of user data go through the service API. Interface code (CLI, website, scripts, GitHub workflows) never opens files under `data/`, parses YAML or Markdown, or runs SQL. |
+| A2 | SQL exists only in the SQLite repositories, always as parameterized queries. YAML and Markdown are read and written only in the sync adapter. Services never touch either directly. |
+| A3 | Services work with typed domain models (`Bullet`, `Profile`, `Application`, `Event`, `Contact`, `Organization`, `Document`, `Snapshot`, …). The same models generate the JSON Schemas for YAML validation and editor help (R10.14), so the file format and the database can't drift apart. |
+| A4 | Each repository is an interface. SQLite is the only backend in this repo. Another database can be added as a new backend without changing services or interfaces (see ARCHITECTURE.md). |
+| A5 | **Generated API.** Each service operation is defined once, with typed inputs and outputs. The HTTP API and its OpenAPI spec are generated from those definitions. The CLI and website are thin clients of the same operations. Nothing can be done in only one interface. |
+| A6 | Validation runs in the service layer on every write. YAML input goes through the extra safety stages in R7.7 first, then the same service validation as any API write. |
+| A7 | A user editing YAML is an input to the app, not a change to stored data. It takes effect only when the sync service validates and applies it, recorded in the audit log as the owner's change through the YAML channel. |
+| A8 | Once the API exists, the AI agent creates profiles, fit reports, draft bullets and draft events by calling the API (CLI or HTTP), not by writing files. |
+
+### 9.2 Ready for RBAC without a refactor
+
+The app does not build user accounts. It does build the structure that role-based access control needs, so adding roles later only means adding configuration and a new policy.
+
+| Id | Requirement |
+| --- | --- |
+| B1 | Every service call takes a **request context**: actor id, the actor's roles, the user space it acts in and a request id. No service method works without one. |
+| B2 | Every operation declares the permission it needs, for example `content:read`, `content:propose`, `content:confirm`, `profile:write`, `resume:render`, `letter:propose`, `letter:approve`, `snapshot:read`, `snapshot:regenerate`, `snapshot:pin`, `snapshot:delete`, `organization:read`, `organization:write`, `organization:merge`, `application:read`, `application:write`, `event:append`, `site:publish`, `space:init`, `space:check`, `space:sync`, `data:backup`, `data:restore`. The declaration is part of the operation's definition, so the generated API documents it as well. |
+| B3 | Authorization is checked in one place: the service layer calls a policy interface before every operation. The app ships one policy: the local **owner** has every permission in their own user space and none outside it. Two non-human actors also exist: `agent` (B7) and `system` (the bootstrap script, limited to `space:init`, `space:check` and `space:sync`). |
+| B4 | Interfaces never make permission decisions; they only supply identity. No code path skips the check, including internal calls between services. |
+| B5 | Every stored record belongs to a user space and carries `created_by`, `created_at`, `updated_by` and `updated_at`. Every event records its actor. Changes from YAML sync are recorded as the owner's, with the channel noted. |
+| B6 | Every write creates an audit entry (actor, channel, operation, target, time, result) in the audit log table. |
+| B7 | **The AI agent is its own actor** with the `agent` role. It can read content and postings, propose draft bullets, write profiles and fit reports, draft cover letters and answers, and draft events. It can read the organization registry and suggest entries (R11.8), but cannot add, rename or merge them. It can read and regenerate snapshots, but cannot pin or delete them. It cannot confirm content, approve letters or answers, confirm events, publish, sync, back up or restore. This makes the honesty rule ("AI advises, the user decides") something the code enforces, not just a convention. |
+| B8 | Roles and their permissions are configuration, not code. Besides `owner`, `agent`, `system` and `viewer` (read only), a host can add roles such as `reviewer` (for example a career coach who can read and comment but not confirm) or `admin`. The request context also carries a tenant id, and the policy refuses any access across tenants. |
+| B9a | **Who is calling:** every HTTP API call carries a local bearer token that identifies the actor. `rb token --actor agent` (or `--actor owner`) issues a token, stores only its hash, and replaces the previous one; the user gives the agent token to their AI tool. Requests without a valid token are read-only and limited to the website's pages. The CLI acts as the owner unless `RB_ACTOR_TOKEN` names another actor. These checks prevent mistakes and keep the agent within its role; they are not protection against someone who already controls the user's machine or Docker. |
+| B9 | Tests check that every operation declares a permission, a deny-all policy blocks every operation, and a read-only policy blocks every write. |
+
+The interfaces that implement A1–A5 and B1–B8 (app factory, storage, request context with tenant, input adapter, secrets, file stores, template overrides and operation plugins) are described for contributors in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## 10. Privacy and security
+
+- Job postings, profiles, fit reports, application records, contacts, databases, backups and tailored PDFs never leave the user's private storage.
+- The only thing published is the user's public resume HTML, rendered from the public profile, and only when the user sets a publish target.
+- Commit messages, file names and workflow logs that could ever be public must not contain employer names, posting text or contact details.
+- Contact data about third parties (recruiters, interviewers) is personal data. It is kept only locally, and the user can delete it.
+- The tracker website and HTTP API are reachable only from the user's own machine. Inside the container the server listens on all interfaces, as containers require, but `compose.yaml` publishes the port only on the host's `127.0.0.1`.
+- Snapshots never contain contact details or secrets (R12.3).
+- YAML input is read with a safe loader and strict limits (R7.7), so a malformed or hostile file can't run code or exhaust memory.
+- User data, databases, backups, rendered output and secrets never go into the Docker image. `.dockerignore` excludes them, and a CI check fails the image build if any of them appear in the build context.
+- Every write is recorded in the audit log (section 9.2), so it is always clear who or what changed a record: the user (through YAML or a command) or the AI agent.
+
+## 11. Distribution and deployment: Docker
+
+The application ships and runs as a Docker image. The image contains only code, templates, migrations and the system libraries it needs. All user data stays on the user's machine and is mounted into the container.
+
+### 11.1 Image
+
+| Id | Requirement |
+| --- | --- |
+| DK1 | One image runs the HTTP API, the tracker website, the sync watcher and the CLI. The same image is used in development, CI and by end users. |
+| DK2 | The base image is pinned to an exact version. The image includes WeasyPrint's system libraries (Pango and similar) and a fixed set of fonts, so PDFs render the same on every machine. |
+| DK3 | The container runs as a non-root user. `PUID` and `PGID` build arguments or environment variables match the host user, so files written to bind mounts belong to that user. |
+| DK4 | The image has a health check that calls an unauthenticated health operation in the API. |
+| DK5 | Images are versioned (semantic version tags) and can be published to a container registry (D11), so new users never need to build the image themselves. |
+| DK14 | The container entrypoint runs `bootstrap` (R10.1), including migrations and the first sync, before starting the server. If bootstrap finds a broken mount, the container stops with a clear message instead of starting half-working. Sync validation errors do not stop the container (R7.9). |
+
+### 11.2 Volumes
+
+| Mount      | Type                     | Holds                                                                    | Who writes it                                          | Back up                                                     |
+| ---------- | ------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
+| `/data`    | Bind mount (host folder) | User input and working copies: YAML and Markdown files, `SYNC-STATUS.md` | The user, and the app's write-back (R7.12)             | Recommended: make each user folder its own private git repo |
+| `/db`      | Named volume (`rb-db`)   | `app.db` for each user: the source of truth                              | Only the SQLite repositories                           | Required. Automatic, to `/backups` (DK6)                    |
+| `/output`  | Bind mount (host folder) | Temporary PDF/HTML exports                                               | Only the render service, when the user asks for a file | No. Disposable; everything can be rebuilt from snapshots    |
+| `/backups` | Bind mount (host folder) | Timestamped database backups                                             | Only the backup service                                | This is the backup. Copy it off the machine                 |
+
+| Id | Requirement |
+| --- | --- |
+| DK6 | The database lives on a named volume, not a bind mount, so SQLite file locking works reliably on every host OS. Backups use SQLite's online backup, so they are consistent while the app runs. They are taken automatically before any sync or migration that changes data (R7.13) and once a day. Retention is counted separately for each kind, so frequent pre-change backups can't push out the daily ones: the last 30 pre-change backups and the last 30 daily backups (`backups.keep` in `user.yaml`). `backup` and `restore` commands are available at any time. |
+| DK7 | Because `/data` is a plain folder on the host, the user can edit YAML with any editor and keep it in git outside the container. The sync watcher picks up changes within seconds (R7.5). |
+| DK8 | Removing or rebuilding the container never loses data: everything persistent is on a mount or the named volume. Losing `/output` loses nothing either (R12.14). |
+
+### 11.3 Configuration and secrets
+
+| Id | Requirement |
+| --- | --- |
+| DK9 | All settings come from environment variables with documented defaults: data roots (R1.7), port, default user, log level, sync polling interval. |
+| DK10 | Contact details and publish credentials come from Docker secrets (`/run/secrets/...`) or environment variables, using the names in `user.yaml`. They are never stored in an image, a mount, the database or a log. |
+| DK11 | A `compose.yaml` in the code repo defines the service, the four mounts, the localhost-only port and the secrets. `docker compose up` is the standard way to run the app. |
+
+### 11.4 Interfaces from outside the container
+
+| Id | Requirement |
+| --- | --- |
+| DK12 | The CLI runs through the same container (`docker compose run --rm app <command>` or `docker compose exec app <command>`), so it goes through the same service API (A1). |
+| DK13 | The AI agent runs on the host and works only through the HTTP API on `127.0.0.1` or through the containerized CLI, as the `agent` actor (B7). It never edits the mounted files directly once the API exists (A8). |
+
+### 11.5 Code and data repos
+
+- The code repo can be made public. It holds no user data (`data/`, `output/` and `backups/` are gitignored, R1.5).
+- Each user's `/data/<user>/` folder can be its own private git repo. Because of write-back (R7.12), its history shows both the user's edits and the app's changes.
+- Development and tests may run outside Docker with the same environment variables pointing at `examples/sample-user/` and a temporary database, but Docker is the supported way to run the app.
+
+## 12. Decisions
+
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026.
+
+| #   | Decision                                                                     | Choice                                                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Job id format                                                                | `YYYY-MM-DD-<company>[-<department>]` built from the entry date and organization registry slugs (R1.3, section 8.11)                                                                   |
+| D2  | When SQLite becomes the source of truth                                      | **From the start.** YAML is the user's input; validated input is synced into SQLite, which is the source of truth from then on (section 8.7)                                                  |
+| D3  | Database storage: named volume or bind mount?                                | Named volume `rb-db` (DK6), with `backup` and `restore` to get the file out                                                                                                            |
+| D4  | Base image                                                                   | `python:3.12-slim`, pinned by digest, with WeasyPrint system libraries and a fixed font set                                                                                            |
+| D5  | Web and API stack                                                            | Python with FastAPI and Pydantic: typed operations generate the HTTP API and OpenAPI spec (A5). Website uses server-rendered pages calling the same operations; no frontend build step |
+| D6  | Are the lifecycle stages and fields in section 8.6 right?                    | As written in section 8.6                                                                                                                                                              |
+| D7  | Stale threshold                                                              | 14 days                                                                                                                                                                                |
+| D8  | Permission names and the `agent` role's permissions (B2, B7)                 | As written in B2, B3 and B7                                                                                                                                                            |
+| D9  | Word limits for the short answer and cover letter (R9.4, R9.7)               | 100 words; 250–350 words                                                                                                                                                               |
+| D10 | Do owner edits that add claims without citations block or only warn? (R9.12) | Warn and record. The owner is the author, but the warning keeps it visible                                                                                                             |
+| D11 | Container registry for published images                                      | GitHub Container Registry, next to the code repo                                                                                                                                       |
+| D12 | Default host paths for the mounted folders                                   | `./data`, `./output` and `./backups` next to `compose.yaml`, all changeable in a `.env` file                                                                                           |
+| D13 | YAML library (must keep comments, R10.15)                                    | `ruamel.yaml` in round-trip mode                                                                                                                                                       |
+| D14 | What first run does when `RB_DEFAULT_USER` is not set (R10.4)                | Create nothing; print the exact `init-user` command. The seeded `.env.example` sets it, so most users never see this                                                                   |
+| D15 | Snapshot limits (R12.9)                                                      | 10 per document type per job; 1,000 per user; protected snapshots exempt from the per-job limit                                                                                        |
+| D16 | Contact details in snapshots (R12.3)                                         | Not stored. Fingerprint only; regeneration uses current values and warns if they changed                                                                                               |
+| D17 | Where snapshots live (R12.4)                                                 | In the database, following D2. Covered by the automatic backups                                                                                                                        |
+| D18 | Backups location                                                             | Separate `/backups` mount (default `./backups`)                                                                                                                                        |
+| D19 | Write app changes back to the YAML files? (R7.12)                            | Yes                                                                                                                                                                                    |
+| D20 | Unit of sync: per file, or all changed files together? (R7.8)                | Per file, in dependency order, so one typo doesn't block every other change                                                                                                            |
+| D21 | When sync runs (R7.5)                                                        | At startup, on file change (watcher with polling fallback), before CLI commands, and on demand                                                                                         |
+| D22 | Backup retention (DK6)                                                       | Before every data-changing sync or migration, plus daily; keep the last 30 of each kind (DK6)                                                                                          |
+| D23 | License | AGPL-3.0-or-later (decided November 14, 2026). Contributions need a DCO sign-off and are also licensed under MIT, so the project can later move to MIT or Apache-2.0 (`CONTRIBUTING.md`) |
+
+## 13. Milestones
+
+1. Core skeleton: domain models, request context, policy interface with owner, agent and system policies, audit log, repository interfaces, SQLite backend with migrations and constraints, generated HTTP API, CLI. Includes the RBAC tests (B9). Dockerfile, `compose.yaml` and `.dockerignore` with the four mounts. CI builds the image and runs the tests inside it.
+2. YAML input: schemas, seed templates with comments and smart defaults, generated JSON Schemas, the sync service with every validation stage (R7.7), change detection, conflict detection, write-back, automatic backups, `SYNC-STATUS.md`, `bootstrap`, `doctor`, `init-user` and `new-job`, and the fictional example user built from the seed. Includes tests with malformed and hostile YAML.
+3. Rendering service and versioned templates, snapshots with limits and protection, and exact regeneration with a byte-for-byte test, all against the example user.
+4. Tailoring end to end through the API with the example user: posting, profile, fit report, PDF, then the "Why do you want to work here?" answer and cover letter with honesty checks.
+5. Application service and the read-only tracker website, including sync status.
+6. Optional publishing of the exported public site to the target set in `user.yaml`.
+7. First real user onboarded with `init-user` and running a live application from start to finish. Anything they need that's missing becomes a generic feature (R1.6).

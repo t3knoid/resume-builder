@@ -1,0 +1,15 @@
+# User data, databases, output, backups and secrets never go into the image (PRD section 10).
+data/
+output/
+backups/
+.env
+*.db
+*.db-wal
+*.db-shm
+**/SYNC-STATUS.md
+**/.schemas/
+.git/
+.venv/
+**/__pycache__/
+.pytest_cache/
+*.egg-info/

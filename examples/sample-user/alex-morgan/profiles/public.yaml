@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../.schemas/profile.schema.json
+schema_version: 1
+summary: [sum-platform, sum-observability]
+roles:
+  role-fabrikam: [fab-ci-pipeline, fab-monitoring, fab-ansible]
+  role-tailspin: [tail-docker, tail-backup]
+projects:
+  proj-llm-lab: [lab-llm-server]
+education: [edu-bs]
+certifications: []
+skills: [sk-automation, sk-observability, sk-platforms]
+keywords: []
+earlier_roles: {}
+omitted_roles: []
+gaps: []

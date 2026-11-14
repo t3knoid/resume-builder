@@ -1,0 +1,12 @@
+/* letter/classic v1. Released: never edit; add a new version instead. */
+@page { size: Letter; margin: 0.9in 1in; }
+body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1d1d1f; margin: 0; }
+header { border-bottom: 2px solid #1f4e79; padding-bottom: 6pt; margin-bottom: 18pt; }
+h1 { font-size: 18pt; margin: 0; color: #1f4e79; }
+h2 { font-size: 12pt; color: #1f4e79; margin: 0 0 10pt; }
+.contact { margin: 4pt 0 0; font-size: 9pt; color: #444; }
+.date, .recipient { margin: 0 0 12pt; }
+main p { margin: 0 0 10pt; }
+main.pre p { white-space: pre-wrap; }
+.signoff { margin-top: 18pt; }
+.watermark { position: fixed; top: 40%; left: 0; right: 0; text-align: center; font-size: 40pt; color: rgba(200, 0, 0, 0.16); transform: rotate(-24deg); }

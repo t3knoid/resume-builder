@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=.schemas/organizations.schema.json
+schema_version: 1
+companies:
+  - slug: northwind-labs
+    name: Northwind Labs
+    aliases: [Northwind Laboratories]
+    website: null
+    notes: Fictional company used in examples.
+    departments:
+      - slug: platform-engineering
+        name: Platform Engineering
+        aliases: []
+        notes: null
+  - slug: contoso-health
+    name: Contoso Health
+    aliases: []
+    website: null
+    notes: null
+    departments: []

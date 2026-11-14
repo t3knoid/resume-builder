@@ -1,0 +1,21 @@
+# User data and generated files never belong in the code repo (PRD R1.5, section 11.5)
+data/
+output/
+backups/
+.env
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Written into the example folder whenever it's synced
+examples/**/SYNC-STATUS.md
+examples/**/.schemas/

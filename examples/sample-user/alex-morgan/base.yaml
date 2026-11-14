@@ -1,0 +1,107 @@
+# yaml-language-server: $schema=.schemas/base.schema.json
+#
+# CONTENT LIBRARY of a fictional engineer. Every claim is confirmed and has evidence and limits.
+
+schema_version: 1
+
+summary_phrases:
+  - id: sum-platform
+    text: Platform engineer who turns manual operations work into tested automation.
+    tags: [automation, platform]
+    status: confirmed
+  - id: sum-observability
+    text: Builds monitoring that people actually use to find problems before customers do.
+    tags: [monitoring, observability]
+    status: confirmed
+
+roles:
+  - id: role-fabrikam
+    title: Senior Platform Engineer
+    official_title: Systems Engineer III
+    company: Fabrikam Logistics
+    location: Portland, OR
+    start: 2021-04
+    end: 2024-06
+    description: Fabrikam Logistics runs freight tracking software for regional carriers.
+    bullets:
+      - id: fab-ci-pipeline
+        text: Cut release time from 3 hours to 25 minutes by moving 14 services to GitHub Actions pipelines with automated tests.
+        tags: [github-actions, ci-cd, python, automated-testing]
+        metric: 3 hours to 25 minutes; 14 services
+        evidence: Pipeline history and the release calendar.
+        limits: Services only; the mobile app kept its own pipeline.
+        status: confirmed
+      - id: fab-monitoring
+        text: Built Prometheus and Grafana monitoring with alerting for 60 hosts, replacing nightly manual checks.
+        tags: [prometheus, grafana, monitoring, alerting]
+        metric: 60 hosts
+        evidence: Grafana dashboards and on-call handbook.
+        limits: Infrastructure metrics; application tracing was another team.
+        status: confirmed
+      - id: fab-ansible
+        text: Automated OS patching for 200 Linux servers with Ansible, reducing the monthly patch window from two days to one evening.
+        tags: [ansible, linux, patching, automation]
+        metric: 200 servers
+        evidence: Change records.
+        limits: Linux only.
+        status: confirmed
+  - id: role-tailspin
+    title: Systems Administrator
+    official_title: null
+    company: Tailspin Toys
+    location: Remote
+    start: 2017-01
+    end: 2021-03
+    description: null
+    bullets:
+      - id: tail-docker
+        text: Containerized 8 internal tools with Docker so new environments took minutes instead of days.
+        tags: [docker, automation]
+        metric: 8 tools
+        evidence: Internal wiki.
+        limits: Internal tools, not customer-facing services.
+        status: confirmed
+      - id: tail-backup
+        text: Rebuilt backups with restore tests every week, after finding the old backups could not be restored.
+        tags: [backups, linux]
+        metric: null
+        evidence: null
+        limits: null
+        status: confirmed
+
+projects:
+  - id: proj-llm-lab
+    name: Local LLM inference lab
+    start: 2024-07
+    end: present
+    description: null
+    bullets:
+      - id: lab-llm-server
+        text: Run a self-hosted LLM inference server on a single GPU, with Prometheus metrics for GPU temperature and load.
+        tags: [llm, gpu, prometheus, python]
+        metric: null
+        evidence: Home lab notes.
+        limits: Personal lab; inference only, no training.
+        status: confirmed
+
+education:
+  - id: edu-bs
+    institution: Lakeside State University
+    degree: B.S.
+    field: Computer Science
+    start: null
+    end: 2016
+    status: confirmed
+
+certifications: []
+
+skills:
+  - id: sk-automation
+    name: Automation
+    items: [Ansible, Python, Bash, GitHub Actions]
+  - id: sk-observability
+    name: Observability
+    items: [Prometheus, Grafana, Alertmanager]
+  - id: sk-platforms
+    name: Platforms
+    items: [Linux, Docker]

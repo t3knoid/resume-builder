@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: No user data in the repo
+        run: |
+          if git ls-files data output backups | grep -q .; then
+            echo "Files under data/, output/ or backups/ must never be committed."; exit 1
+          fi
+      - name: Build image
+        run: docker build --build-arg RB_BUILD_ID=${GITHUB_SHA::12} -t resume-builder:ci .
+      - name: No user data in the image
+        run: |
+          docker run --rm --entrypoint sh resume-builder:ci -c '
+            found="$(find /data /db /output /backups -mindepth 1)"
+            if [ -n "$found" ]; then
+              echo "The image must not contain user data, databases, output or backups:"
+              echo "$found"; exit 1
+            fi'
+      - name: Tests inside the image (includes the byte-for-byte PDF test)
+        run: docker run --rm --entrypoint sh resume-builder:ci -c 'cd /app && python -m pytest -q'

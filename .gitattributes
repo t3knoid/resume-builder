@@ -1,0 +1,9 @@
+# Files that run inside the Linux container must keep LF line endings, even on a Windows
+# checkout with core.autocrlf=true. A CRLF entrypoint stops the container from starting.
+*.sh       text eol=lf
+Dockerfile text eol=lf
+
+# Windows helper scripts keep CRLF so cmd.exe and PowerShell read them as written.
+*.cmd      text eol=crlf
+*.bat      text eol=crlf
+*.ps1      text eol=crlf
