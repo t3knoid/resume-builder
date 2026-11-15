@@ -433,7 +433,8 @@ The agent can't create the job, fill in your `interest_notes`, or add companies.
   `cover-letter.md`, `answers/why-here.md`) so you can read and edit them. Your edits sync back as yours.
 - **Website:** each job page shows documents and their status, and the timeline shows proposed
   events waiting for you. **Proposed jobs** lists the jobs the agent proposed, with every value and
-  the passage it came from, and the command to confirm or discard each one.
+  the passage it came from, and the command to confirm or discard each one. Sign in on the site (`rb web-login`) to confirm or discard
+  proposed jobs and events there with a button.
 - **Audit log:** `rb audit` lists every action with who did it (`agent`, `owner`, `system`) and how.
 - **Nothing is final until you approve it.** Letters and answers need `rb approve`; events need
   `rb confirm-event`; proposed jobs need `rb confirm-job`; new bullets need `status: confirmed` (or `rb confirm <id>`).

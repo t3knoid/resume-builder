@@ -76,6 +76,23 @@ def actor_for_token(space: UserSpace, token: str) -> str | None:
     return space.repo.token_actor(hash_token(token))
 
 
+LOGIN_CODE_MINUTES = 10
+
+
+@operation("web_login_link", "token:issue", Empty,
+           "A one-time code to sign in to the tracker website as the owner (valid 10 minutes, once).", writes=True)
+def web_login_link(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
+    """Only a hash of the code is stored. The website exchanges it for a session (issue #30)."""
+    import secrets
+    from datetime import datetime, timedelta, timezone
+
+    code = secrets.token_urlsafe(24)
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=LOGIN_CODE_MINUTES)).replace(microsecond=0).isoformat()
+    with space.repo.transaction():
+        space.repo.add_login_code(hash_token(code), expires)
+    return {"code": code, "expires_at": expires, "path": f"/u/{space.user}/login?code={code}"}
+
+
 # ---------------------------------------------------------------- backups (DK6)
 
 @operation("backup", "data:backup", Empty, "Back up the database now.", writes=True)

@@ -506,5 +506,28 @@ class SqliteStorage:
     def has_tokens(self, actor: str) -> bool:
         return self.conn.execute("SELECT 1 FROM tokens WHERE actor = ? AND revoked = 0", (actor,)).fetchone() is not None
 
+    # ------------------------------------------------------------ website sign-in (hashes only)
+    def add_web_session(self, session_hash: str, actor: str, expires_at: str) -> None:
+        now = now_iso()
+        self.conn.execute("INSERT INTO web_sessions (session_hash, actor, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+                          (session_hash, actor, now, now, expires_at))
+
+    def web_session(self, session_hash: str) -> dict | None:
+        return _one(self.conn.execute("SELECT * FROM web_sessions WHERE session_hash = ?", (session_hash,)))
+
+    def touch_web_session(self, session_hash: str, last_seen_at: str) -> None:
+        self.conn.execute("UPDATE web_sessions SET last_seen_at = ? WHERE session_hash = ? AND revoked = 0", (last_seen_at, session_hash))
+
+    def revoke_web_session(self, session_hash: str) -> None:
+        self.conn.execute("UPDATE web_sessions SET revoked = 1 WHERE session_hash = ?", (session_hash,))
+
+    def add_login_code(self, code_hash: str, expires_at: str) -> None:
+        self.conn.execute("INSERT INTO web_login_codes (code_hash, created_at, expires_at) VALUES (?, ?, ?)", (code_hash, now_iso(), expires_at))
+
+    def use_login_code(self, code_hash: str, now: str) -> bool:
+        cur = self.conn.execute("UPDATE web_login_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?",
+                                (now, code_hash, now))
+        return cur.rowcount == 1
+
 
 Repo = SqliteStorage  # the earlier name

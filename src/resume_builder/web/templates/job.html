@@ -16,7 +16,10 @@
 <br><span class="muted" style="font-size:12px">recorded {{ e.recorded_at }} by {{ e.actor }}</span></li>
 {% endfor %}
 </ul>
-{% if job.event_drafts %}<p class="stale">Proposed by the agent, waiting for you:</p><ul>{% for d in job.event_drafts %}<li>#{{ d.draft_id }} {{ d.date }} {{ d.type }} {{ d.stage or "" }} {{ d.notes or "" }}: <code>rb confirm-event {{ d.draft_id }}</code></li>{% endfor %}</ul>{% endif %}
+{% if error %}<p class="bad"><strong>Not done:</strong> {{ error.message }}{% for pr in error.problems %}<br>{{ pr.message }}{% endfor %}</p>{% endif %}
+{% if job.event_drafts %}<p class="stale">Proposed by the agent, waiting for you:</p><ul>{% for d in job.event_drafts %}<li>#{{ d.draft_id }} {{ d.date }} {{ d.type }} {{ d.stage or "" }} {{ d.notes or "" }}:
+{% if signed_in %}{% for action in ("confirm", "discard") %}<form method="post" action="/u/{{ user }}/events/{{ d.draft_id }}/{{ action }}" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="job_id" value="{{ job.job_id }}"><button>{{ action | capitalize }}</button></form> {% endfor %}
+{% else %}<code>rb confirm-event {{ d.draft_id }}</code>{% endif %}</li>{% endfor %}</ul>{% endif %}
 </div>
 <div class="card"><h2>Details</h2>
 <p><strong>Interest:</strong> {{ job.interest_level or "—" }}/5{% if job.interest_notes %}<br>{{ job.interest_notes }}{% endif %}</p>

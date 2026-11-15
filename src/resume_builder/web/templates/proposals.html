@@ -2,7 +2,9 @@
 {% block title %}Proposed jobs · {{ user }}{% endblock %}
 {% block body %}
 <h1>Jobs proposed by your AI agent</h1>
-<p class="muted">Nothing is created until you confirm. This site is read-only: review a proposal here, then run the command shown. <code>rb confirm-job</code> shows the same preview and asks about the company, duplicates and any value you want to change.</p>
+{% if notice %}<p class="ok">{{ notice }}</p>{% endif %}
+{% if signed_in %}<p class="muted">Nothing is created until you confirm. Check the company and any value, then confirm or discard.</p>
+{% else %}<p class="muted">Nothing is created until you confirm. The site is read-only until you <a href="/u/{{ user }}/login">sign in</a>; or run the command shown. <code>rb confirm-job</code> shows the same preview and asks about the company, duplicates and any value you want to change.</p>{% endif %}
 {% if not proposals %}<div class="card"><p class="muted">No jobs waiting.</p></div>{% endif %}
 {% for p in proposals %}{% set v = p.preview %}
 <div class="card">
@@ -21,7 +23,42 @@
   {% for line in v.disagreements + v.notes %}<p class="stale">Check: {{ line }}</p>{% endfor %}
   {% for d in v.duplicates %}<p class="stale">Already tracking <a href="/u/{{ user }}/jobs/{{ d.job_id }}">{{ d.job_id }}</a> ({{ d.reasons | join(", ") }}{% if d.archived %}, archived{% endif %}). Use <code>rb confirm-job {{ p.proposal_id }} --recapture {{ d.job_id }}</code> to save this posting for it instead.</p>{% endfor %}
   <details><summary>The posting as captured</summary><pre>{{ v.posting_preview }}</pre></details>
-  <p><code>rb confirm-job {{ p.proposal_id }}</code> to review and create it, or <code>rb discard-job {{ p.proposal_id }}</code>.</p>
+  {% set err = errors.get(p.proposal_id) %}
+  {% if err %}<div class="bad"><p><strong>Not created:</strong> {{ err.message }}</p>{% if err.problems %}<ul>{% for pr in err.problems %}<li>{% if pr.field %}<code>{{ pr.field }}</code>: {% endif %}{{ pr.message }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
+  {% if signed_in %}{% set given = values.get(p.proposal_id, {}) %}{% set current = {} %}{% for f in v.fields %}{% set _ = current.update({f.name: f.value}) %}{% endfor %}
+  <form method="post" action="/u/{{ user }}/proposals/{{ p.proposal_id }}/confirm">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <table>
+      <tr><th>Company</th><td>
+        <select name="company">
+          {% if v.company.suggested %}<option value="{{ v.company.suggested }}" selected>{% for c in v.company.candidates if c.slug == v.company.suggested %}{{ c.name }}{% endfor %} (suggested)</option>{% endif %}
+          {% if not v.company.suggested %}<option value="" {{ 'selected' if not given.get('company') }}>Choose…</option>{% endif %}
+          {% for c in companies if c.slug != v.company.suggested %}<option value="{{ c.slug }}" {{ 'selected' if given.get('company') == c.slug }}>{{ c.name }}</option>{% endfor %}
+          <option value="__new__" {{ 'selected' if given.get('company') == '__new__' or (not v.company.suggested and v.company.name and not v.company.candidates and not given) }}>Add a new company…</option>
+        </select>
+        <label class="muted">new company's name <input name="new_company" value="{{ given.get('new_company', v.company.name or '') }}"></label>
+      </td></tr>
+      <tr><th>Department</th><td>
+        <input name="department" value="{{ given.get('department', v.department.suggested or '') }}" placeholder="optional">
+        {% if v.department.name and not v.department.suggested %}<input type="hidden" name="posting_department" value="{{ v.department.name }}">
+        <label class="muted"><input type="checkbox" name="add_department" value="1" {{ 'checked' if given.get('add_department') }}> add "{{ v.department.name }}" to your registry</label>{% endif %}
+      </td></tr>
+      {% for name in edit_fields %}
+      <tr><th>{{ name | replace("_", " ") }}</th><td><input name="f_{{ name }}" size="60" value="{{ given.get('f_' ~ name, current.get(name, '')) }}"></td></tr>
+      {% endfor %}
+      {% if v.duplicates %}<tr><th>Already tracking</th><td>
+        {% for d in v.duplicates %}<label><input type="radio" name="duplicate" value="recapture:{{ d.job_id }}" {{ 'checked' if loop.first and given.get('duplicate', '') in ('', 'recapture:' ~ d.job_id) or given.get('duplicate') == 'recapture:' ~ d.job_id }}> save this posting for {{ d.job_id }}</label><br>{% endfor %}
+        <label><input type="radio" name="duplicate" value="new" {{ 'checked' if given.get('duplicate') == 'new' }}> start a separate job anyway</label><br>
+        <label class="muted"><input type="checkbox" name="replace_posting" value="1" {{ 'checked' if given.get('replace_posting') }}> replace posting text I pasted or edited myself</label>
+      </td></tr>{% endif %}
+    </table>
+    <p class="muted">Values you change are yours; the others are what the posting states. An empty field is left out.</p>
+    <p><button>Confirm and create the job</button></p>
+  </form>
+  <form method="post" action="/u/{{ user }}/proposals/{{ p.proposal_id }}/discard"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Discard</button></form>
+  {% else %}
+  <p><code>rb confirm-job {{ p.proposal_id }}</code> to review and create it, or <code>rb discard-job {{ p.proposal_id }}</code>. Or <a href="/u/{{ user }}/login">sign in</a> to do it here.</p>
+  {% endif %}
 </div>
 {% endfor %}
 {% endblock %}

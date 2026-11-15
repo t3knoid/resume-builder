@@ -419,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     cmd("dashboard", "Search statistics.")
     cmd("actions", "Upcoming actions and stale applications.")
+    cmd("web-login", "Print a one-time link that signs you in to the tracker website (valid 10 minutes).")
     t = cmd("token", "Issue an API token (replaces the previous one).")
     t.add_argument("--actor", choices=["owner", "agent"], default="agent")
     cmd("backup", "Back up the database now.")
@@ -535,6 +536,11 @@ def _run(app: App, args) -> int | None:
         ev = {"date": args.date or date.today().isoformat(), "type": args.type, "stage": args.stage,
               "notes": args.notes, "contact": args.contact, "documents": args.documents, "corrects": args.corrects}
         _print(op("event_append", {"job_id": args.job_id, "event": ev}))
+    elif c == "web-login":
+        out = op("web_login_link")
+        port = os.environ.get("RB_HOST_PORT") or str(app.settings.port)
+        print(f"Open this link to sign in to the tracker (works once, until {out['expires_at']}):")
+        print(f"  http://localhost:{port}{out['path']}")
     elif c == "job-drafts":
         rows = op("job_intake_proposals")
         for r in rows:

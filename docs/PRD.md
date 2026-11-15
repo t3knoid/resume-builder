@@ -61,7 +61,7 @@ The first real user is onboarded through the same path as any other user (`init-
 - Job intake (section 8.13): start a job from its posting URL, or from pasted text as a fallback, with fields extracted and the posting captured, confirmed once by the user.
 - Validator, renderer, ATS-friendly HTML and PDF output (WeasyPrint).
 - Cover letter and "Why do you want to work here?" drafts built from the tailored resume (section 8.9).
-- Read-only local tracker website: application list, history for each application, basic dashboard, sync status.
+- Local tracker website: application list, history for each application, basic dashboard, sync status. Read-only unless the owner signs in, which adds Confirm and Discard for what the agent proposed (R8.8).
 - Optional public resume site: render the public profile and export it as a static site. Pushing it to the publish target in `user.yaml` (for example a GitHub Pages repo) is milestone 6.
 - A user manual and a quick-start guide (`docs/USER-MANUAL.md`, `docs/QUICKSTART.md`), written around the example user.
 - **No built-in AI model.** The AI agent is an outside tool the user runs. It always acts as the `agent` actor (B7, DK13) through one of three channels, each going through the operation registry and the same checks:
@@ -281,7 +281,7 @@ SQLite is the source of truth. The user's YAML and Markdown files are the input 
 | --- | --- |
 | R7.14 | If the database is lost, `restore` brings back a backup, and the next sync re-applies any newer edits from the YAML files. `import --fresh` builds a new database from the YAML files alone. Snapshots, the audit log and archived items can't be rebuilt that way, which is why backups are automatic. |
 
-### 8.8 Tracker website (local, read-only)
+### 8.8 Tracker website (local; read-only unless the owner signs in)
 
 | Id | Requirement |
 | --- | --- |
@@ -292,6 +292,8 @@ SQLite is the source of truth. The user's YAML and Markdown files are the input 
 | R8.5 | **Upcoming actions:** next actions sorted by due date; stale applications. |
 | R8.6 | **Company view:** every application to one company (and its departments) over time, so the user can see past contact before applying again. |
 | R8.7 | **Sync status:** time of the last sync, files waiting on a fix, conflicts and how to resolve them. |
+| R8.8 | **Owner sign-in (D32):** without signing in, the site is read-only. The owner can sign in with an owner token or a one-time link from `rb web-login` (valid 10 minutes, once); agent tokens can't. Signed in, jobs and events the agent proposed get **Confirm** and **Discard**, which run the same operations as `rb confirm-job`, `rb discard-job`, `rb confirm-event` and `rb discard-event`, as the owner on channel `web`, checked and audited like any other call. No other writes happen on the website. |
+| R8.9 | **Session and forged requests:** the session cookie is `HttpOnly`, `SameSite=Strict`, scoped to the user's pages and signed with a per-install secret kept outside the data folder; only a hash of the session id is stored. Sessions end after 12 hours idle, 7 days in all, or on sign-out. Every action is a `POST` with a CSRF token tied to the session, from the site's own origin and a local host name (against DNS rebinding); a `GET` never changes anything. Pages can't be framed and run no scripts (Content-Security-Policy). |
 
 ### 8.9 Cover letters and application answers
 
@@ -589,7 +591,7 @@ The app does not build user accounts. It does build the structure that role-base
 | B6 | Every write creates an audit entry (actor, channel, operation, target, time, result) in the audit log table. |
 | B7 | **The AI agent is its own actor** with the `agent` role. It can read content and postings, propose draft bullets, write profiles and fit reports, draft cover letters and answers, and draft events and job intakes (R13.22). It can read the organization registry and suggest entries (R11.8), but cannot add, rename or merge them. It can read and regenerate snapshots, but cannot pin or delete them. It cannot confirm content, approve letters or answers, confirm events, publish, sync, back up or restore. This makes the honesty rule ("AI advises, the user decides") something the code enforces, not just a convention. |
 | B8 | Roles and their permissions are configuration, not code. Besides `owner`, `agent`, `system` and `viewer` (read only), a host can add roles such as `reviewer` (for example a career coach who can read and comment but not confirm) or `admin`. The request context also carries a tenant id, and the policy refuses any access across tenants. |
-| B9a | **Who is calling:** every HTTP API call carries a local bearer token that identifies the actor. `rb token --actor agent` (or `--actor owner`) issues a token, stores only its hash, and replaces the previous one; the user gives the agent token to their AI tool. Requests without a valid token are read-only and limited to the website's pages. The CLI acts as the owner unless `RB_ACTOR_TOKEN` names another actor. These checks prevent mistakes and keep the agent within its role; they are not protection against someone who already controls the user's machine or Docker. |
+| B9a | **Who is calling:** every HTTP API call carries a local bearer token that identifies the actor. `rb token --actor agent` (or `--actor owner`) issues a token, stores only its hash, and replaces the previous one; the user gives the agent token to their AI tool. Requests without a valid token are read-only and limited to the website's pages, unless the owner has signed in to the website (R8.8, R8.9), which gives a session for its Confirm and Discard buttons only. The CLI acts as the owner unless `RB_ACTOR_TOKEN` names another actor. These checks prevent mistakes and keep the agent within its role; they are not protection against someone who already controls the user's machine or Docker. |
 | B9 | Tests check that every operation declares a permission, a deny-all policy blocks every operation, and a read-only policy blocks every write. |
 
 The interfaces that implement A1–A5 and B1–B8 (app factory, storage, request context with tenant, input adapter, secrets, file stores, template overrides and operation plugins) are described for contributors in [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -600,6 +602,7 @@ The interfaces that implement A1–A5 and B1–B8 (app factory, storage, request
 - The only thing published is the user's public resume HTML, rendered from the public profile, and only when the user sets a publish target.
 - Commit messages, file names and workflow logs that could ever be public must not contain employer names, posting text or contact details.
 - Contact data about third parties (recruiters, interviewers) is personal data. It is kept only locally, and the user can delete it.
+- Signing in to the website (R8.8, R8.9) doesn't change who can reach it. The session cookie never leaves the user's machine, only its hash is stored, and every website action needs a CSRF token, the site's own origin and a local host name.
 - The tracker website and HTTP API are reachable only from the user's own machine. Inside the container the server listens on all interfaces, as containers require, but `compose.yaml` publishes the port only on the host's `127.0.0.1`.
 - Snapshots never contain contact details or secrets (R12.3).
 - Job intake (section 8.13) is the only feature that makes outbound requests: one GET of a URL the user supplies, with no cookies or user data, and internal addresses refused (R13.5–R13.8).
@@ -660,7 +663,7 @@ The application ships and runs as a Docker image. The image contains only code, 
 
 ## 12. Decisions
 
-All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D31 (job intake, section 8.13) were decided on November 15, 2026.
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D32 (job intake, section 8.13, and website sign-in) were decided on November 15, 2026.
 
 | #   | Decision                                                                     | Choice                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -693,6 +696,7 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 | D27 | May the agent trigger a fetch (R13.24)? |  Yes, through `job_intake_propose` with a URL, since the fetch is one GET under R13.5–R13.8 and creates nothing until the owner confirms |
 | D28 | New permission `application:propose` for the agent (R13.22) | Add it to B2 and the agent role in B7 |
 | D29 | Keep every capture of a posting, or only the latest (R13.10)? | Keep all; they are small text and show when a posting changed |
+| D32 | May the website confirm or discard what the agent proposed (R8.8, R8.9)? | Yes, after the owner signs in with an owner token or a one-time `rb web-login` link. Cookie session (`HttpOnly`, `SameSite=Strict`, signed, 12 hours idle, 7 days at most), synchronizer CSRF tokens, `Origin`/`Host` checks, no scripts; nothing else on the website writes (decided November 15, 2026) |
 | D31 | May site adapters read JSON APIs (R13.7, R13.16)? | Yes, only when an adapter asks for JSON. Captures may then be `application/json` (migration 0004). The wording check for JSON is per block: each Markdown block must match one JSON string value, words in order; blocks may come in any order (decided November 15, 2026) |
 | D30 | One command or two for starting a job (R13.1)? | One: `new-job`. Given a link, `--stdin` or `--file` it runs intake; without, it creates the job only. A separate `intake` command was confusing next to `new-job` (decided November 15, 2026) |
 
@@ -702,7 +706,7 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 2. YAML input: schemas, seed templates with comments and smart defaults, generated JSON Schemas, the sync service with every validation stage (R7.7), change detection, conflict detection, write-back, automatic backups, `SYNC-STATUS.md`, `bootstrap`, `doctor`, `init-user` and `new-job`, and the fictional example user built from the seed. Includes tests with malformed and hostile YAML.
 3. Rendering service and versioned templates, snapshots with limits and protection, and exact regeneration with a byte-for-byte test, all against the example user.
 4. Tailoring end to end through the API with the example user: posting, profile, fit report, PDF, then the "Why do you want to work here?" answer and cover letter with honesty checks.
-5. Application service and the read-only tracker website, including sync status.
+5. Application service and the tracker website, including sync status (owner sign-in for Confirm and Discard came later, R8.8).
 6. Optional publishing of the exported public site to the target set in `user.yaml`.
 7. First real user onboarded with `init-user` and running a live application from start to finish. Anything they need that's missing becomes a generic feature (R1.6).
 8. Job intake (section 8.13, D24–D29): capture from a URL and from pasted text, structured-data and rule-based extraction with passage checks, registry matching, duplicate check, preview and confirm, agent proposals, and fetch-safety tests against a local stub.

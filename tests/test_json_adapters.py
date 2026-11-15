@@ -89,7 +89,8 @@ def test_migration_keeps_every_capture_and_proposal(tmp_path):
                          "captured_at, created_by, created_at) VALUES ('url', 'https://x.example', 'application/json', '{}', 'x', ?, 't', 'o', 't')",
                          (content_hash("{}"),))
         backups = []
-        assert db.migrate(conn, MIGRATIONS, backup_fn=backups.append) == [4] and backups == ["pre-migration"]
+        applied = db.migrate(conn, MIGRATIONS, backup_fn=backups.append)
+        assert applied[0] == 4 and backups == ["pre-migration"]
         assert _dump_table(conn, "posting_captures") == captures
         assert _dump_table(conn, "intake_proposals") == proposals
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []

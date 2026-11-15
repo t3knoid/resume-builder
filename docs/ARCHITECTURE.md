@@ -206,7 +206,7 @@ Each user space has two `FileStore`s: `space.output` (exported PDFs and HTML and
 
 ### 8. Routers
 
-`ext.add_router(router)` (or `create_app(routers=[...])`) includes a FastAPI router. Inside a route, `Depends(resume_builder.web.app.get_app)` gives the App. Routes that read or change data should call `invoke()` with a request context from `api.context_for(app, user, authorization)`, so they get the same permission checks as everything else.
+`ext.add_router(router)` (or `create_app(routers=[...])`) includes a FastAPI router. Inside a route, `Depends(resume_builder.web.app.get_app)` gives the App. Routes that read or change data should call `invoke()` with a request context from `api.context_for(app, user, authorization)`, so they get the same permission checks as everything else. A website route that changes data must also follow PRD R8.9: a `POST` only, with `web.session.check_request_origin` and `check_csrf` against the owner's session, as the core Confirm and Discard routes in `api.py` do.
 
 ### 9. Site adapters (`adapters.py`)
 

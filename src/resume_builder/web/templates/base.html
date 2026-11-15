@@ -38,7 +38,9 @@ pre { white-space:pre-wrap; background:var(--bg); padding:10px; border-radius:6p
 <header class="top">
   <a class="brand" href="/">resume-builder</a>
   {% if user %}<a href="/u/{{ user }}/">Home</a><a href="/u/{{ user }}/applications">Applications</a><a href="/u/{{ user }}/dashboard">Dashboard</a><a href="/u/{{ user }}/proposals">Proposed jobs</a>{% endif %}
-  <span class="muted" style="margin-left:auto;font-size:12px">v{{ version }} · read-only · <a href="/docs">API</a></span>
+  <span class="muted" style="margin-left:auto;font-size:12px">v{{ version }} ·
+  {% if user and signed_in %}signed in <form method="post" action="/u/{{ user }}/logout" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button style="font-size:12px;padding:1px 6px">Sign out</button></form>
+  {% elif user %}read-only · <a href="/u/{{ user }}/login">Sign in</a>{% else %}read-only{% endif %} · <a href="/docs">API</a></span>
 </header>
 <main>{% block body %}{% endblock %}</main>
 </body>

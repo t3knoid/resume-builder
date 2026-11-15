@@ -627,13 +627,15 @@ Or add the `applied` event in `application.yaml` with a `documents:` list. The a
 
 ## 12. The tracker website
 
-Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It's read-only and reachable only from your computer.
+Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It's reachable only from your computer, and read-only until you sign in.
+
+**Signing in** lets you confirm or discard what your AI agent proposed right on the site, instead of running `rb confirm-job` and friends. Run `rb web-login` and open the link it prints (it works once, for 10 minutes), or use **Sign in** at the top of any page with an owner token (`rb token --actor owner`); agent tokens can't sign in. You stay signed in on that browser for up to 7 days, or until 12 hours without using the site; **Sign out** ends it at once. Nothing else on the website changes your data.
 
 - **Home:** sync status and anything needing attention, upcoming actions (overdue in red), stale applications, proposed events and jobs waiting for you.
 - **Applications:** filter by stage, company, department; sort by any column.
 - **Application:** posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
 - **Company:** every application to that company over time.
-- **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match and any job you already track. Like the rest of the site it's read-only: each proposal shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run.
+- **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match and any job you already track. Signed in, each has a form to check the company, department and any value, handle a duplicate, and **Confirm** (or **Discard**); it does exactly what `rb confirm-job` does. Not signed in, each shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run. Proposed events on a job's page get **Confirm** and **Discard** buttons the same way.
 - **Dashboard:** applications per week, response rate, median days to first response, how far applications got, outcomes by source, response rate with and without a cover letter, and the bullets that appear most in resumes that reached interviews.
 
 ## 13. Your public resume
@@ -763,6 +765,7 @@ An MCP or API agent can also **propose a new job**: give it the posting's link a
 | `rb clean-output`                                                                  | Empty the export folder                             |
 | `rb dashboard` / `rb actions`                                                    | Statistics; upcoming and stale                      |
 | `rb token --actor agent\|owner`                                                     | Issue an API token                                  |
+| `rb web-login`                                                                     | Print a one-time link that signs you in to the website |
 | `rb backup` / `backups` / `restore <file>`                                     | Backups                                             |
 | `rb audit`                                                                         | Recent audit log                                    |
 | `rb ops` / `rb call <operation> '<json>'`                                        | List or call any API operation directly             |
@@ -777,6 +780,7 @@ An MCP or API agent can also **propose a new job**: give it the posting's link a
 - YAML is read with strict safety limits, so a malformed or malicious file can't run code or exhaust memory.
 - Every change is in the audit log with who made it (you, the agent, or the system) and how (file sync, command, API).
 - Tokens protect against mistakes and keep the agent within its role. They aren't protection against someone who already controls your computer or Docker.
+- Signing in to the website gives your browser a session cookie that only works on your computer, can't be read by page scripts, and ends after 12 hours idle or 7 days. Its buttons only work from the tracker's own pages: a form on another website can't use them.
 - Job ids contain employer names. If you keep your folder in git, keep that repository private.
 
 ## 18. Troubleshooting

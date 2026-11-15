@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Sign in · {{ user }}{% endblock %}
+{% block body %}
+<h1>Sign in</h1>
+<div class="card">
+{% if error %}<p class="bad">{{ error }}</p>{% endif %}
+{% if signed_in %}<p class="ok">You're signed in. <a href="/u/{{ user }}/proposals">Proposed jobs</a></p>
+{% elif code %}
+  <p>Sign in to the tracker as the owner of <strong>{{ user }}</strong> with the link from <code>rb web-login</code>.</p>
+  <form method="post" action="/u/{{ user }}/login"><input type="hidden" name="code" value="{{ code }}"><button>Sign in</button></form>
+{% else %}
+  <p>Signing in lets you confirm or discard what your AI agent proposed, right here. Without signing in, the site stays read-only.</p>
+  <p>The quickest way: run <code>rb web-login</code> and open the link it prints (it works once, for 10 minutes).</p>
+  <p>Or paste an owner token (<code>rb token --actor owner</code>). Agent tokens can't sign in.</p>
+  <form method="post" action="/u/{{ user }}/login">
+    <label>Owner token <input type="password" name="token" autocomplete="off" size="50" required></label>
+    <button>Sign in</button>
+  </form>
+{% endif %}
+<p class="muted">You stay signed in on this browser for up to 7 days, or until 12 hours without using the site. Signing out ends it at once.</p>
+</div>
+{% endblock %}
