@@ -40,6 +40,7 @@ Whatever the assistant, it works as the **agent**: it can only propose drafts, a
 | Draft cover letters and answers (strict checks) | Record events, only propose them for you to confirm |
 | Propose new bullets (always saved as drafts) | Add, rename or merge companies |
 | Propose events, e.g. from a recruiter email you paste | Sync, back up, restore, publish, delete or pin snapshots |
+| Propose a new job from a posting link or text | Create a job, only propose it for you to confirm |
 
 Everything the agent does is in the audit log (`rb audit`), marked `agent`, with the channel it used (`mcp`, `cli` for pasted drafts, or `api`).
 
@@ -67,7 +68,7 @@ Test it by hand. It should print a "ready" line, then wait. Press Ctrl+C to stop
 
 ```sh
 docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp
-# resume-builder MCP server for `you` ready (23 tools).
+# resume-builder MCP server for `you` ready (25 tools).
 ```
 
 ### Keep coding agents out of your data folder
@@ -392,7 +393,8 @@ back as HTTP 422 with a `problems` list.
 ## 8. A typical session
 
 1. **You:** `rb new-job <link to the posting>` (it reads the posting and fills in the job), then write
-   `interest_notes`.
+   `interest_notes`. Or, with an MCP or API agent, paste the link into the chat and say "start a job
+   for this": the agent proposes it, and you review it with `rb confirm-job <n>` (see below).
 2. **Agent:** reads the brief: rules, posting, your interest notes, and every confirmed bullet with
    its id, tags, metric and limits.
 3. **Agent:** saves `profile.yaml` (ids only) and `fit-report.md`. If it breaks a rule, for example
@@ -413,16 +415,28 @@ Good prompts are short and specific:
 - "Draft a why-here answer for `<job-id>` under 100 words. Use my interest notes for the first sentence."
 - "This recruiter email arrived for `<job-id>`; propose the right event: …"
 - "Compare my last two resume snapshots for `<job-id>` and tell me what changed."
+- "Start a job for this posting: <link>." (MCP or API agents)
+
+### Paste the link, then confirm
+
+With an MCP or API agent you can hand it a posting link (or the posting text) and let it propose the job:
+
+1. **You:** "Start a job for this posting: https://careers.example.com/jobs/1234".
+2. **Agent:** calls `job_intake_propose` with the link. The app fetches the page itself, with the same safety checks as `rb new-job <url>`. The agent may add values it read from the posting, each with the exact passage that states it; the app rejects any value the posting doesn't state. Nothing is created yet.
+3. **You:** `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`). `rb confirm-job <n>` shows the same preview and asks the same questions as `rb new-job <url>`: company, duplicates, any value to change. Or `rb discard-job <n>`.
+
+The agent can't create the job, fill in your `interest_notes`, or add companies. Chat-only assistants can't propose jobs; run `rb new-job <link>` yourself.
 
 ## 9. Reviewing what the agent did
 
 - **Files:** the agent's drafts are written to your job folder (`profile.yaml`, `fit-report.md`,
   `cover-letter.md`, `answers/why-here.md`) so you can read and edit them. Your edits sync back as yours.
 - **Website:** each job page shows documents and their status, and the timeline shows proposed
-  events waiting for you.
+  events waiting for you. **Proposed jobs** lists the jobs the agent proposed, with every value and
+  the passage it came from, and the command to confirm or discard each one.
 - **Audit log:** `rb audit` lists every action with who did it (`agent`, `owner`, `system`) and how.
 - **Nothing is final until you approve it.** Letters and answers need `rb approve`; events need
-  `rb confirm-event`; new bullets need `status: confirmed` (or `rb confirm <id>`).
+  `rb confirm-event`; proposed jobs need `rb confirm-job`; new bullets need `status: confirmed` (or `rb confirm <id>`).
 
 ## 10. Troubleshooting
 

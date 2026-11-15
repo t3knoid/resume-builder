@@ -615,10 +615,11 @@ Or add the `applied` event in `application.yaml` with a `documents:` list. The a
 
 Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It's read-only and reachable only from your computer.
 
-- **Home:** sync status and anything needing attention, upcoming actions (overdue in red), stale applications, proposed events waiting for you.
+- **Home:** sync status and anything needing attention, upcoming actions (overdue in red), stale applications, proposed events and jobs waiting for you.
 - **Applications:** filter by stage, company, department; sort by any column.
-- **Application:** posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), and how this resume differs from your public one.
+- **Application:** posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
 - **Company:** every application to that company over time.
+- **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match and any job you already track. Like the rest of the site it's read-only: each proposal shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run.
 - **Dashboard:** applications per week, response rate, median days to first response, how far applications got, outcomes by source, response rate with and without a cover letter, and the bullets that appear most in resumes that reached interviews.
 
 ## 13. Your public resume
@@ -699,7 +700,7 @@ Nothing is lost: if you restored the wrong zip, the two pre-restore copies hold 
 
 ## 15. Working with an AI agent
 
-The app has no built-in AI. You use your own assistant, and it works as the **agent**: it can read your confirmed content and propose drafts, but it can't confirm content, approve letters, record events (only propose them), publish, or change companies. Every draft passes the honesty checks.
+The app has no built-in AI. You use your own assistant, and it works as the **agent**: it can read your confirmed content and propose drafts, but it can't confirm content, approve letters, record events or create jobs (only propose them), publish, or change companies. Every draft passes the honesty checks.
 
 There are three ways to connect it:
 
@@ -709,7 +710,9 @@ There are three ways to connect it:
 
 **Step-by-step instructions for each assistant are in [AI-AGENTS.md](AI-AGENTS.md).**
 
-Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `rb discard-event <n>`. Everything the agent does is in the audit log (`rb audit`), marked as the agent.
+Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `rb discard-event <n>`.
+
+An MCP or API agent can also **propose a new job**: give it the posting's link and it calls `job_intake_propose`. The app fetches the posting itself and rejects any value the posting doesn't state. Nothing is created until you review it: `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`), and `rb confirm-job <n>` shows the same preview and questions as `rb new-job <url>` (it takes the same options, such as `--company` and `--yes`). `rb discard-job <n>` drops one. Everything the agent does is in the audit log (`rb audit`), marked as the agent.
 
 ## 16. Command reference
 
@@ -729,6 +732,7 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 | `rb list [--stage --company --all]`                                                | List applications                                   |
 | `rb show <job-id>`                                                                 | One application in full                             |
 | `rb event <job-id> [--type --stage --date --notes --documents --corrects]`         | Add an event                                        |
+| `rb job-drafts` / `confirm-job <n>` / `discard-job <n>`                        | Jobs proposed by the agent                          |
 | `rb event-drafts` / `confirm-event <n>` / `discard-event <n>`                  | Events proposed by the agent                        |
 | `rb archive-job <job-id> [--restore]`                                              | Archive an application                              |
 | `rb orgs` / `add-company` / `add-department` / `rename-org` / `merge-orgs` | Companies and departments                           |
@@ -783,5 +787,4 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 - Pushing the public site to its target automatically (`rb publish` exports it; you copy it).
 - More than one design template (`classic` only).
 - Importing an existing resume into `base.yaml`.
-- Letting the AI agent propose a new job from a posting, for you to confirm.
 - File changes are detected by checking every few seconds, not by instant notification. It works the same across every operating system's Docker mounts.

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Proposed jobs · {{ user }}{% endblock %}
+{% block body %}
+<h1>Jobs proposed by your AI agent</h1>
+<p class="muted">Nothing is created until you confirm. This site is read-only: review a proposal here, then run the command shown. <code>rb confirm-job</code> shows the same preview and asks about the company, duplicates and any value you want to change.</p>
+{% if not proposals %}<div class="card"><p class="muted">No jobs waiting.</p></div>{% endif %}
+{% for p in proposals %}{% set v = p.preview %}
+<div class="card">
+  <h2>#{{ p.proposal_id }} · {% for f in v.fields if f.name == "title" %}{{ f.value }}{% else %}(no title){% endfor %}</h2>
+  <p class="muted">Proposed by {{ p.proposed_by }} on {{ p.proposed_at[:10] }} · {{ v.source }}{% if v.adapter %} · read by site adapter <code>{{ v.adapter }}</code>{% endif %}{% if v.job_id %} · would become <code>{{ v.job_id }}</code>{% endif %}</p>
+  {% if p.note %}<p><strong>Agent's note:</strong> {{ p.note }}</p>{% endif %}
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Value</th><th>From</th><th>Where the posting says it</th></tr>
+    {% for f in v.fields if f.name not in ("company", "department") %}
+    <tr><td>{{ f.name | replace("_", " ") }}</td><td>{{ f.value }}</td><td class="muted">{{ {"structured": "page data", "rule": "posting text", "adapter": "site adapter", "agent": "agent"}.get(f.origin, f.origin) }}</td><td class="muted">{{ f.passage | truncate(160) }}</td></tr>
+    {% endfor %}
+    {% for label in ("company", "department") %}{% set m = v[label] %}{% if m.name or m.suggested %}
+    <tr><td>{{ label }}</td><td>{% if m.suggested %}{% for c in m.candidates if c.slug == m.suggested %}{{ c.name }}{% endfor %} <code>{{ m.suggested }}</code> <span class="ok">in your registry</span>{% else %}{{ m.name }} <span class="stale">not in your registry</span>{% if m.candidates %} <span class="muted">(similar: {% for c in m.candidates %}<code>{{ c.slug }}</code>{% if not loop.last %}, {% endif %}{% endfor %})</span>{% endif %}{% endif %}</td><td></td><td></td></tr>
+    {% endif %}{% endfor %}
+  </table></div>
+  {% for line in v.disagreements + v.notes %}<p class="stale">Check: {{ line }}</p>{% endfor %}
+  {% for d in v.duplicates %}<p class="stale">Already tracking <a href="/u/{{ user }}/jobs/{{ d.job_id }}">{{ d.job_id }}</a> ({{ d.reasons | join(", ") }}{% if d.archived %}, archived{% endif %}). Use <code>rb confirm-job {{ p.proposal_id }} --recapture {{ d.job_id }}</code> to save this posting for it instead.</p>{% endfor %}
+  <details><summary>The posting as captured</summary><pre>{{ v.posting_preview }}</pre></details>
+  <p><code>rb confirm-job {{ p.proposal_id }}</code> to review and create it, or <code>rb discard-job {{ p.proposal_id }}</code>.</p>
+</div>
+{% endfor %}
+{% endblock %}

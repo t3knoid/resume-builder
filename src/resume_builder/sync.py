@@ -573,6 +573,13 @@ def write_status_file(space: UserSpace, report: SyncReport) -> None:
         for r in report.by("missing"):
             lines.append(f"## {r.rel} (missing)")
             lines += ["- " + p.render() for p in r.problems] + [""]
+    proposals = space.repo.list_intake_proposals("pending")
+    if proposals:
+        lines += ["", "## Jobs proposed by your AI agent", "",
+                  "Nothing is created until you confirm. Review each with `rb confirm-job <n>`, or `rb discard-job <n>`.", ""]
+        for row in proposals:
+            title = next((f["value"] for f in json.loads(row["data"])["fields"] if f["name"] == "title"), "(no title)")
+            lines.append(f"- #{row['id']}: {title} (proposed {row['created_at'][:10]})")
     used = used_intake_files(space)
     if used:
         lines += ["", "## Intake files already used", "",

@@ -152,8 +152,14 @@ def _website(api: FastAPI, app: App) -> None:
             public = run(user, "profile_get", {"key": "public"})
         except AppError:
             pass
-        return page(request, "job.html", user=user, job=detail, docs=docs, snaps=snaps,
+        captures = list(reversed(run(user, "posting_captures", {"job_id": job_id})))  # newest first
+        return page(request, "job.html", user=user, job=detail, docs=docs, snaps=snaps, captures=captures,
                     profile_diff=_profile_diff(public, profile))
+
+    @api.get("/u/{user}/proposals", response_class=HTMLResponse, include_in_schema=False)
+    def proposals(request: Request, user: str):
+        """Jobs the agent proposed. Read-only like the rest of the site: confirming is `rb confirm-job`."""
+        return page(request, "proposals.html", user=user, proposals=run(user, "job_intake_proposals"))
 
     @api.get("/u/{user}/companies/{company}", response_class=HTMLResponse, include_in_schema=False)
     def company(request: Request, user: str, company: str):

@@ -4,7 +4,7 @@
 <h1>{{ job.title or job.job_id }} <span class="pill stage-{{ job.stage }}">{{ job.stage }}</span>{% if job.archived %} <span class="pill">archived</span>{% endif %}</h1>
 <p class="muted"><code>{{ job.job_id }}</code> · <a href="/u/{{ user }}/companies/{{ job.company }}">{{ job.company }}</a>{% if job.department %} / {{ job.department }}{% endif %}
 {% if job.location %} · {{ job.location }}{% endif %}{% if job.work_arrangement %} · {{ job.work_arrangement }}{% endif %}{% if job.salary_range %} · {{ job.salary_range }}{% endif %}
-{% if job.posting_url %} · <a href="{{ job.posting_url }}" rel="noreferrer">posting</a>{% endif %}</p>
+{% if job.posting_url and job.posting_url.startswith(("http://", "https://")) %} · <a href="{{ job.posting_url }}" rel="noreferrer noopener">posting</a>{% elif job.posting_url %} · <span class="muted">{{ job.posting_url }}</span>{% endif %}</p>
 <div class="grid">
 <div class="card"><h2>Timeline</h2>
 <ul class="timeline">
@@ -48,4 +48,9 @@
 {% else %}<p class="muted">Nothing rendered yet: <code>rb render {{ job.job_id }}</code>.</p>{% endif %}
 </div>
 {% if job.posting_text %}<div class="card"><h2>Posting</h2><pre>{{ job.posting_text }}</pre></div>{% endif %}
+{% if captures %}<div class="card"><h2>Saved copies of the posting</h2>
+<p class="muted">The posting as it was when captured, kept even if the employer takes it down. Shown as text; the fetched page itself is never displayed.</p>
+{% for c in captures %}<details{% if loop.first %} open{% endif %}><summary><strong>{{ c.captured_at[:10] }}</strong> · {% if c.source_url and c.source_url.startswith(("http://", "https://")) %}<a href="{{ c.source_url }}" rel="noreferrer noopener">{{ c.source }}</a>{% else %}{{ c.source }}{% endif %}{% if loop.first and captures | length > 1 %} <span class="pill">latest</span>{% endif %} <span class="muted">by {{ c.created_by }}</span></summary>
+<pre>{{ c.markdown }}</pre></details>{% endfor %}
+</div>{% endif %}
 {% endblock %}

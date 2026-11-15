@@ -96,12 +96,8 @@ INTAKE_FIELDS = ("title", "company", "department", "location", "work_arrangement
 ORIGIN_LABEL = {"structured": "page data", "rule": "posting text", "adapter": "site adapter", "agent": "agent", "you": "you"}
 
 
-def _intake(app: App, ctx: RequestContext, args) -> int:
-    """`rb new-job <url>` or `rb new-job --stdin`: preview, then (after one review) create the job
-    (PRD R13.19–R13.21)."""
-    text = sys.stdin.read().lstrip("﻿") if args.stdin else None
-    if args.stdin and not (text or "").strip():
-        raise AppError("Nothing came in on stdin. Pipe the posting text: rb new-job --stdin [url] < posting.txt")
+def _overrides(args) -> dict:
+    """The user's own field values: --set FIELD=VALUE, plus --title and --source."""
     overrides = {}
     for item in args.set:
         name, sep, value = item.partition("=")
@@ -109,15 +105,47 @@ def _intake(app: App, ctx: RequestContext, args) -> int:
             raise AppError(f"--set needs FIELD=VALUE with FIELD one of: {', '.join(INTAKE_FIELDS)}.")
         overrides[name.strip()] = value.strip() or None
     for name in ("title", "source"):  # new-job's own options are your values too
-        if getattr(args, name):
+        if getattr(args, name, None):
             overrides.setdefault(name, getattr(args, name))
+    return overrides
+
+
+def _confirm_job(app: App, ctx: RequestContext, args) -> int:
+    """`rb confirm-job <n>`: the same review as `rb new-job <url>`, for a job the agent proposed."""
+    overrides = _overrides(args)
+    view = invoke(app, ctx, "job_intake_proposals", {"proposal_id": args.proposal_id})[0]
+    if view["status"] != "pending":
+        raise AppError(f"Proposed job #{args.proposal_id} was already {view['status']}.")
+    print(f"Proposed by {view['proposed_by']} on {view['proposed_at'][:10]}" + (f": {view['note']}" if view["note"] else ""))
+    keep = ("company", "department", "create_missing", "overrides", "recapture", "replace_posting", "allow_duplicate")
+    return _review_and_create(
+        app, ctx, args, view["preview"], overrides,
+        submit=lambda payload: invoke(app, ctx, "job_intake_confirm",
+                                      {"proposal_id": args.proposal_id, **{k: payload[k] for k in keep}}),
+        interactive=not args.yes and sys.stdin.isatty())
+
+
+def _intake(app: App, ctx: RequestContext, args) -> int:
+    """`rb new-job <url>` or `rb new-job --stdin`: preview, then (after one review) create the job
+    (PRD R13.19–R13.21)."""
+    text = sys.stdin.read().lstrip("﻿") if args.stdin else None
+    if args.stdin and not (text or "").strip():
+        raise AppError("Nothing came in on stdin. Pipe the posting text: rb new-job --stdin [url] < posting.txt")
+    overrides = _overrides(args)
 
     if args.file:  # read by the file adapter, from the intake folder only
         preview = invoke(app, ctx, "job_intake_preview_file", {"file": args.file, "url": args.url})
     else:
         preview = invoke(app, ctx, "job_intake_preview", {"url": args.url, "text": text})
+    return _review_and_create(app, ctx, args, preview, overrides,
+                              submit=lambda payload: invoke(app, ctx, "job_intake", payload),
+                              interactive=not args.yes and not args.stdin and sys.stdin.isatty())
+
+
+def _review_and_create(app: App, ctx: RequestContext, args, preview: dict, overrides: dict, submit, interactive: bool) -> int:
+    """Show the preview, settle a duplicate and the company, let the user change fields, then submit
+    (job_intake for `rb new-job`, job_intake_confirm for `rb confirm-job`)."""
     _show_preview(preview, overrides)
-    interactive = not args.yes and not args.stdin and sys.stdin.isatty()
     payload = {"capture_id": preview["capture_id"], "fields": preview["fields"], "overrides": overrides,
                "company": args.company, "department": args.department, "create_missing": args.create,
                "recapture": args.recapture, "replace_posting": args.replace, "allow_duplicate": args.allow_duplicate}
@@ -177,7 +205,7 @@ def _intake(app: App, ctx: RequestContext, args) -> int:
                   "(add --set FIELD=VALUE to change a value).")
             return 0
 
-    result = invoke(app, ctx, "job_intake", payload)
+    result = submit(payload)
     used_file = (f"The posting is saved with the job, so you can delete {preview['source_path']} now."
                  if preview.get("source_path") else None)
     if result.get("recaptured"):
@@ -299,6 +327,21 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--contact")
     e.add_argument("--documents", nargs="*", default=[], help="snapshot ids you sent")
     e.add_argument("--corrects", type=int)
+    cmd("job-drafts", "Jobs proposed by the agent, waiting for you.")
+    cj = cmd("confirm-job", "Review a job the agent proposed and create it (the same review as new-job <url>).")
+    cj.add_argument("proposal_id", type=int)
+    cj.add_argument("--company", help="company slug or name (default: the match suggested from the posting)")
+    cj.add_argument("--department", help="department slug or name")
+    cj.add_argument("--title", help="job title, replacing the proposed one")
+    cj.add_argument("--source", choices=["linkedin", "referral", "company_site", "recruiter", "job_board", "other"])
+    cj.add_argument("--create", action="store_true", help="add the company/department to the registry if none matches")
+    cj.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE", help="your own value for a field")
+    cj.add_argument("--recapture", metavar="JOB_ID", help="save the posting for an existing job instead of creating one")
+    cj.add_argument("--replace", action="store_true", help="with --recapture: replace posting text you pasted or edited")
+    cj.add_argument("--allow-duplicate", action="store_true", help="create a new job even if one looks like the same posting")
+    cj.add_argument("--yes", "-y", action="store_true", help="accept the proposal without asking")
+    dj = cmd("discard-job", "Discard a job the agent proposed (nothing is created).")
+    dj.add_argument("proposal_id", type=int)
     cmd("event-drafts", "Events proposed by the agent, waiting for you.")
     ce = cmd("confirm-event", "Confirm a proposed event.")
     ce.add_argument("draft_id", type=int)
@@ -492,6 +535,21 @@ def _run(app: App, args) -> int | None:
         ev = {"date": args.date or date.today().isoformat(), "type": args.type, "stage": args.stage,
               "notes": args.notes, "contact": args.contact, "documents": args.documents, "corrects": args.corrects}
         _print(op("event_append", {"job_id": args.job_id, "event": ev}))
+    elif c == "job-drafts":
+        rows = op("job_intake_proposals")
+        for r in rows:
+            p = r["preview"]
+            title = next((f["value"] for f in p["fields"] if f["name"] == "title"), "(no title)")
+            company = (p["company"]["suggested"] or p["company"]["name"] or "company not named")
+            print(f"#{r['proposal_id']:<4} {title[:40]:40} {company[:24]:24} by {r['proposed_by']} {r['proposed_at'][:10]}")
+        if not rows:
+            print("No jobs waiting. The agent proposes jobs with job_intake_propose.")
+        else:
+            print("Review one with: rb confirm-job <n>   (or rb discard-job <n>)")
+    elif c == "confirm-job":
+        return _confirm_job(app, ctx, args)
+    elif c == "discard-job":
+        _print(op("job_intake_discard", {"proposal_id": args.proposal_id}))
     elif c == "event-drafts":
         _print(op("event_drafts"))
     elif c == "confirm-event":
@@ -644,6 +702,8 @@ def print_bootstrap(report: dict) -> None:
             print(f"  Contact details not set: {', '.join(st['missing_contact_secrets'])} (add them to .env)")
         if st["snapshots"]["near_limit"]:
             print(f"  Saved documents near the limit: {st['snapshots']['count']} of {st['snapshots']['limit']}")
+        if st.get("job_proposals_waiting"):
+            print(f"  {st['job_proposals_waiting']} proposed job(s) waiting: rb job-drafts")
         if st["event_drafts_waiting"]:
             print(f"  {st['event_drafts_waiting']} proposed event(s) waiting: rb event-drafts")
 

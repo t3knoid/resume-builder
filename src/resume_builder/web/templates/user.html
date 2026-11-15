@@ -11,6 +11,7 @@
   {% else %}<p class="ok">All files are in sync.</p>{% endif %}
   {% if status.example_entries_left %}<p class="stale">Example entries still in base.yaml: {{ status.example_entries_left | join(", ") }}. Replace them with your own.</p>{% endif %}
   {% if status.missing_contact_secrets %}<p class="stale">Contact details not set: {{ status.missing_contact_secrets | join(", ") }} (add them to .env).</p>{% endif %}
+  {% if status.job_proposals_waiting %}<p class="stale">{{ status.job_proposals_waiting }} job(s) proposed by your agent, waiting for you: <a href="/u/{{ user }}/proposals">review them</a>.</p>{% endif %}
   {% if status.event_drafts_waiting %}<p class="stale">{{ status.event_drafts_waiting }} proposed event(s) waiting for you: <code>rb event-drafts</code>.</p>{% endif %}
   <p class="muted">Saved documents: {{ status.snapshots.count }} of {{ status.snapshots.limit }}{% if status.snapshots.near_limit %} <span class="stale">(near the limit)</span>{% endif %}</p>
 </div>

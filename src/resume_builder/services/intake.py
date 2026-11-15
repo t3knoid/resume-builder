@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Annotated
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from .. import posting_fields, postingtext
@@ -109,7 +110,7 @@ def _store_posting(space: UserSpace, ctx: RequestContext, job_id: str, capture: 
 
 
 def attach_posting(space: UserSpace, ctx: RequestContext, job_id: str, capture: PostingCapture,
-                   replace: bool = False) -> dict:
+                   replace: bool = False, in_txn=None) -> dict:
     """Store `capture` for `job_id` (or link a stored one) and make it the job's posting.md.
 
     The posting part of posting.md is replaced; the user's "My notes" section is kept. Refuses when
@@ -127,6 +128,8 @@ def attach_posting(space: UserSpace, ctx: RequestContext, job_id: str, capture: 
                        "(your \"My notes\" section is kept either way).")
     with space.repo.transaction():
         capture = _store_posting(space, ctx, job_id, capture, row["posting_text"])
+        if in_txn is not None:
+            in_txn(job_id)
     file_updated = space.changed("posting", job_id)
     return {"job_id": job_id, "capture_id": capture.id, "file_updated": file_updated,
             "note": None if file_updated else
@@ -411,6 +414,12 @@ class IntakeIn(BaseModel):
 @operation("job_intake", "application:write", IntakeIn,
            "Create a job from a previewed posting: fields filled in, posting.md written, all in one step.", writes=True)
 def job_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn) -> dict:
+    return run_intake(space, ctx, data)
+
+
+def run_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn, in_txn=None) -> dict:
+    """Create the job (or re-capture into an existing one). `in_txn(job_id)`, if given, runs inside
+    the same transaction, so a proposal is marked confirmed together with the job it becomes."""
     from ..slug import build_job_id
     from ..validation import validate_application, validate_registry
     from .jobs import today_for
@@ -423,7 +432,7 @@ def job_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn) -> dict:
         raise Conflict(f"This posting was already used for `{capture.job_id}`.")
 
     if data.recapture:
-        out = attach_posting(space, ctx, data.recapture, capture, replace=data.replace_posting)
+        out = attach_posting(space, ctx, data.recapture, capture, replace=data.replace_posting, in_txn=in_txn)
         out["recaptured"] = True
         out["next"] = [f"The posting for {data.recapture} was updated; its application fields were left as they were."]
         return out
@@ -505,6 +514,8 @@ def job_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn) -> dict:
             space.repo.replace_registry(reg, ctx.actor)
         space.repo.save_application(application, "interested", ctx.actor)
         capture = _store_posting(space, ctx, job_id, capture, None)
+        if in_txn is not None:
+            in_txn(job_id)
     if created:
         space.changed("registry")
     space.changed("job_created", job_id)
@@ -525,3 +536,140 @@ def _new_slug(name: str, taken: set[str]) -> str:
     if slug in taken:
         raise Conflict(f"`{slug}` is already in your registry (it may be archived). Use that entry.")
     return slug
+
+
+# ---------------------------------------------------------------- proposals from the AI agent (R13.22–R13.24, D27, D28)
+
+class IntakeProposeIn(BaseModel):
+    url: str | None = Field(None, description="The posting's link. The app fetches it once (you don't need to), "
+                                              "unless `text` is given.")
+    text: str | None = Field(None, description="The posting text, when you already have it (for example pasted "
+                                                "by the user). `url` is then only recorded as its link.")
+    fields: list[ExtractedField] = Field(default_factory=list, description=
+                                         "Values you read from the posting, each with the exact passage that states "
+                                         "it. Leave out anything the posting doesn't state. Never interest_notes.")
+    note: Annotated[str, StringConstraints(max_length=1000)] | None = Field(
+        None, description="A short note for the user, e.g. what to check")
+
+    @model_validator(mode="after")
+    def _one_source(self):
+        if not (self.url and self.url.strip()) and not (self.text and self.text.strip()):
+            raise ValueError("give the posting's link (`url`) or its text (`text`)")
+        return self
+
+
+@operation("job_intake_propose", "application:propose", IntakeProposeIn,
+           "Propose a new job from a posting link or text, for the owner to confirm. Creates no job.", writes=True)
+def job_intake_propose(space: UserSpace, ctx: RequestContext, data: IntakeProposeIn) -> dict:
+    url = data.url.strip() if data.url and data.url.strip() else None
+    adapter, notes = None, []
+    if data.text and data.text.strip():
+        capture = capture_from_text(data.text, source_kind="stdin", source_url=url)
+    else:
+        result = capture_url(space, ctx, url)
+        capture, adapter, notes = result.capture, result.adapter, result.notes
+    proposed = [f.model_copy(update={"origin": "agent"}) for f in data.fields]
+    posting_fields.check(capture, proposed)  # the honesty check (R13.15): every value must be stated in the posting
+    extraction = posting_fields.extract(capture, first=proposed)
+    capture = _keep_capture(space, ctx, capture)
+    for row in space.repo.list_intake_proposals("pending"):
+        if row["capture_id"] == capture.id:
+            raise Conflict(f"This posting is already proposed as #{row['id']}, waiting for the owner.")
+    stored = {"fields": [f.model_dump() for f in extraction.as_list()], "disagreements": extraction.disagreements,
+              "notes": notes, "adapter": adapter}
+    with space.repo.transaction():
+        proposal_id = space.repo.add_intake_proposal(capture.id, stored, data.note, ctx.actor)
+    preview = _preview(space, capture, extraction, adapter=adapter, notes=notes)
+    return {"proposal_id": proposal_id, "preview": preview,
+            "next": f"The owner reviews it with `rb confirm-job {proposal_id}` or discards it with `rb discard-job {proposal_id}`."}
+
+
+def _proposal_view(space: UserSpace, row: dict) -> dict:
+    data = json.loads(row["data"])
+    capture = space.repo.get_posting_capture(row["capture_id"])
+    extraction = Extraction(fields={f["name"]: ExtractedField(**f) for f in data["fields"]},
+                            disagreements=list(data.get("disagreements", [])))
+    return {"proposal_id": row["id"], "status": row["status"], "proposed_by": row["created_by"],
+            "proposed_at": row["created_at"], "note": row["note"], "job_id": row["job_id"],
+            "preview": _preview(space, capture, extraction, adapter=data.get("adapter"), notes=data.get("notes"))}
+
+
+class ProposalsIn(BaseModel):
+    proposal_id: int | None = Field(None, description="Only this proposal (any status)")
+
+
+@operation("job_intake_proposals", "application:read", ProposalsIn, "Jobs proposed by the agent, waiting for the owner.")
+def job_intake_proposals(space: UserSpace, ctx: RequestContext, data: ProposalsIn) -> list[dict]:
+    if data.proposal_id is not None:
+        row = space.repo.get_intake_proposal(data.proposal_id)
+        if row is None:
+            raise NotFound(f"No proposed job #{data.proposal_id}.")
+        return [_proposal_view(space, row)]
+    return [_proposal_view(space, row) for row in space.repo.list_intake_proposals("pending")]
+
+
+class ProposalConfirmIn(BaseModel):
+    proposal_id: int
+    company: str | None = Field(None, description="Company slug, or a name. Default: the proposal's suggestion.")
+    department: str | None = None
+    create_missing: bool = False
+    overrides: dict[IntakeFieldName, str | None] = Field(default_factory=dict, description="Your own values")
+    recapture: str | None = Field(None, description="Save the posting for this existing job instead of creating one")
+    replace_posting: bool = False
+    allow_duplicate: bool = False
+
+
+def _pending(space: UserSpace, proposal_id: int) -> dict:
+    row = space.repo.get_intake_proposal(proposal_id)
+    if row is None:
+        raise NotFound(f"No proposed job #{proposal_id}.")
+    if row["status"] != "pending":
+        raise Conflict(f"Proposed job #{proposal_id} was already {row['status']}.")
+    return row
+
+
+@operation("job_intake_confirm", "application:write", ProposalConfirmIn,
+           "Create the job an agent proposed, after the owner's review (same choices as job_intake).", writes=True)
+def job_intake_confirm(space: UserSpace, ctx: RequestContext, data: ProposalConfirmIn) -> dict:
+    row = _pending(space, data.proposal_id)
+    fields = [ExtractedField(**f) for f in json.loads(row["data"])["fields"]]
+    intake = IntakeIn(capture_id=row["capture_id"], fields=fields, company=data.company, department=data.department,
+                      create_missing=data.create_missing, overrides=data.overrides, recapture=data.recapture,
+                      replace_posting=data.replace_posting, allow_duplicate=data.allow_duplicate)
+    out = run_intake(space, ctx, intake,
+                     in_txn=lambda job_id: space.repo.resolve_intake_proposal(row["id"], "confirmed", job_id, ctx.actor))
+    out["proposal_id"] = row["id"]
+    return out
+
+
+class ProposalIn(BaseModel):
+    proposal_id: int
+
+
+@operation("job_intake_discard", "application:write", ProposalIn, "Discard a job the agent proposed. Nothing is created.",
+           writes=True)
+def job_intake_discard(space: UserSpace, ctx: RequestContext, data: ProposalIn) -> dict:
+    row = _pending(space, data.proposal_id)
+    with space.repo.transaction():
+        space.repo.resolve_intake_proposal(row["id"], "discarded", None, ctx.actor)
+    return {"proposal_id": row["id"], "status": "discarded"}
+
+
+# ---------------------------------------------------------------- saved copies of a job's posting (R13.10, website)
+
+class CapturesIn(BaseModel):
+    job_id: str
+
+
+@operation("posting_captures", "application:read", CapturesIn,
+           "Every saved copy of a job's posting, oldest first, as converted text (never the raw page).")
+def posting_captures(space: UserSpace, ctx: RequestContext, data: CapturesIn) -> list[dict]:
+    if space.repo.application_row(data.job_id) is None:
+        raise NotFound(f"No job `{data.job_id}`.")
+    out = []
+    for row in space.repo.list_posting_captures(data.job_id):
+        cap = space.repo.get_posting_capture(row["id"])
+        out.append({"id": cap.id, "source": source_label(cap), "source_kind": cap.source_kind,
+                    "source_url": cap.source_url, "source_path": cap.source_path, "captured_at": cap.captured_at,
+                    "created_by": cap.created_by, "content_hash": cap.content_hash, "markdown": cap.markdown})
+    return out

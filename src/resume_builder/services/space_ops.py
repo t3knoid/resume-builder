@@ -44,6 +44,7 @@ def status(space: UserSpace) -> dict:
         "snapshots": {"count": snaps, "limit": s.snapshots.max_total, "near_limit": snaps >= 0.9 * s.snapshots.max_total},
         "seed_version": space.app.settings.seed_version,
         "event_drafts_waiting": len(space.repo.event_drafts()),
+        "job_proposals_waiting": len(space.repo.list_intake_proposals("pending")),
     }
 
 

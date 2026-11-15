@@ -328,6 +328,29 @@ class SqliteStorage:
             "SELECT source_path, job_id, content_hash FROM posting_captures WHERE source_kind = 'file' AND job_id IS NOT NULL "
             "ORDER BY source_path, id"))
 
+    # ------------------------------------------------------------ intake proposals (R13.22–R13.24)
+    def add_intake_proposal(self, capture_id: int, data: dict, note: str | None, actor: str) -> int:
+        now = now_iso()
+        cur = self.conn.execute(
+            "INSERT INTO intake_proposals (capture_id, status, data, note, job_id, created_by, created_at, updated_by, updated_at) "
+            "VALUES (?, 'pending', ?, ?, NULL, ?, ?, ?, ?)", (capture_id, _j(data), note, actor, now, actor, now))
+        return cur.lastrowid
+
+    def get_intake_proposal(self, proposal_id: int) -> dict | None:
+        return _one(self.conn.execute("SELECT * FROM intake_proposals WHERE id = ?", (proposal_id,)))
+
+    def list_intake_proposals(self, status: str | None = "pending") -> list[dict]:
+        if status is None:
+            return _all(self.conn.execute("SELECT * FROM intake_proposals ORDER BY id"))
+        return _all(self.conn.execute("SELECT * FROM intake_proposals WHERE status = ? ORDER BY id", (status,)))
+
+    def resolve_intake_proposal(self, proposal_id: int, status: str, job_id: str | None, actor: str) -> None:
+        cur = self.conn.execute(
+            "UPDATE intake_proposals SET status = ?, job_id = ?, updated_by = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+            (status, job_id, actor, now_iso(), proposal_id))
+        if cur.rowcount != 1:
+            raise Conflict(f"Proposal {proposal_id} isn't waiting any more.")
+
     def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
         row = _one(self.conn.execute("SELECT job_id FROM posting_captures WHERE id = ?", (capture_id,)))
         if row is None:
