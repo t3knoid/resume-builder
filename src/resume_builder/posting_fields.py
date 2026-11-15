@@ -237,7 +237,8 @@ class Extraction:
         if current is None:
             self.fields[name] = ExtractedField(name=name, value=value, passage=passage, origin=origin)
         elif norm(current.value) != norm(value) and not _same_amounts(name, current.value, value):
-            first = "the page's structured data" if current.origin == "structured" else "the posting"
+            first = {"structured": "the page's structured data", "adapter": "the site adapter",
+                     "agent": "the agent"}.get(current.origin, "the posting")
             self.disagreements.append(f"{name}: {first} says {current.value!r}, but its text also says {value!r}. "
                                       f"Using {current.value!r}; check it.")
 
@@ -249,10 +250,13 @@ def _same_amounts(name: str, a: str, b: str) -> bool:
     return name == "salary_range" and _numbers(a) == _numbers(b) and bool(_numbers(a))
 
 
-def extract(capture: PostingCapture) -> Extraction:
-    """Fields the posting states, structured data first (R13.14). Every value passes `verify`;
-    anything that doesn't is dropped rather than kept."""
+def extract(capture: PostingCapture, first: list[ExtractedField] | tuple = ()) -> Extraction:
+    """Fields the posting states, structured data first (R13.14). `first` (for example a site
+    adapter's fields) takes precedence over both. Every value passes `verify`; anything that doesn't
+    is dropped rather than kept."""
     out = Extraction()
+    for f in first:
+        out.put(f.name, f.value, f.passage, f.origin)
     if capture.content_type == "text/html":
         for jp in postingtext.job_postings(capture.raw_content)[:1]:
             _from_job_posting(jp, out)

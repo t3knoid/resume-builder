@@ -208,6 +208,46 @@ Each user space has two `FileStore`s: `space.output` (exported PDFs and HTML and
 
 `ext.add_router(router)` (or `create_app(routers=[...])`) includes a FastAPI router. Inside a route, `Depends(resume_builder.web.app.get_app)` gives the App. Routes that read or change data should call `invoke()` with a request context from `api.context_for(app, user, authorization)`, so they get the same permission checks as everything else.
 
+### 9. Site adapters (`adapters.py`)
+
+Job intake (PRD section 8.13) reads any posting page through a generic path: schema.org `JobPosting` data, then the page's main content and simple rules. For a site whose pages that path reads poorly, typically an applicant tracking system that hosts many employers' career pages, a plugin can register a **site adapter** with `ext.add_site_adapter(adapter)`.
+
+An adapter has a `name`, the `domains` it handles (a domain also matches its subdomains; the most specific match wins), and `capture(url, fetch)`, which returns an `AdapterCapture`: the fetched page, optionally the posting as Markdown, and fields with the passages they came from.
+
+```python
+from resume_builder.adapters import AdapterCapture
+from resume_builder.models import ExtractedField
+
+
+class ExampleAts:
+    """Reads postings on the fictional jobs.example-ats.com."""
+
+    name = "example-ats"
+    domains = ("jobs.example-ats.com",)
+
+    def capture(self, url, fetch):
+        page = fetch(url)  # the only way to fetch: safe, audited, limited to `domains`
+        employer = ...     # read from page.text with this site's markup
+        return AdapterCapture(
+            page=page,
+            markdown=None,  # None: core converts the page
+            fields=[ExtractedField(name="company", value=employer, passage=f"Apply to {employer}")],
+        )
+
+
+def register(ext):
+    ext.add_site_adapter(ExampleAts())
+```
+
+Core holds an adapter to the same rules as everything else:
+
+- **Fetching:** `fetch` is the App's safe fetcher with the user's limits and the audit (R13.5–R13.8): internal addresses refused on every redirect, timeout and size limit, no cookies. It only fetches from the adapter's own domains, at most `adapters.MAX_FETCHES` (2) times per intake. The page an adapter returns must be one it got from `fetch`.
+- **Wording:** Markdown an adapter returns is used only if every word appears in the page, in order (`postingtext.wording_preserved`, R13.11). Otherwise core converts the page itself and says so.
+- **Fields:** every field goes through `posting_fields.verify` (R13.15). One whose passage isn't in the page, or doesn't state the value, is dropped and reported. Adapter fields take precedence over the generic extraction, which still fills the fields the adapter leaves out.
+- **Failures:** an adapter that raises is reported as a failed fetch with the paste fallback, and audited (`posting:adapter`).
+
+These checks keep honest adapters on the rails; an adapter is still code the host chose to install. `tests/test_site_adapters.py` shows an adapter and each check.
+
 ## Writing a plugin package
 
 Expose a module or object with `register(ext)` through the entry point group `resume_builder.plugins`:
@@ -233,6 +273,7 @@ flowchart LR
     EXT --> REG["App registry<br/>operations, permissions,<br/>role grants"]
     EXT --> RT["FastAPI routers"]
     EXT --> TD["Template folders<br/>website, documents"]
+    EXT --> SA["Site adapters<br/>job intake"]
     REG --> API["HTTP API routes<br/>and OpenAPI spec"]
     REG --> TOOLS["MCP tools,<br/>per role"]
     REG --> CMD["rb call, rb ops"]

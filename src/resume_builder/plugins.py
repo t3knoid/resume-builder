@@ -8,7 +8,8 @@ A plugin is any object with a `register(ext)` method, or a plain callable taking
 - declare new permissions and grant them to roles (`ext.add_permission`, `ext.grant`);
 - add FastAPI routers to the web app (`ext.add_router`);
 - add website template directories that override the packaged ones (`ext.add_template_dir`);
-- add document template roots with new resume or letter templates (`ext.add_document_templates`).
+- add document template roots with new resume or letter templates (`ext.add_document_templates`);
+- add site adapters that read one site's job posting pages (`ext.add_site_adapter`, PRD R13.16).
 
 Plugins are passed explicitly (`App(plugins=[...])`, `create_app(plugins=[...])`) or discovered
 from installed packages through the `resume_builder.plugins` entry point group:
@@ -43,6 +44,7 @@ class Extensions:
     routers: list[Any] = field(default_factory=list)
     template_dirs: list[Path] = field(default_factory=list)
     document_template_dirs: list[Path] = field(default_factory=list)
+    site_adapters: list[Any] = field(default_factory=list)
     loaded: list[str] = field(default_factory=list)
 
     # ------------------------------------------------------------ operations and permissions
@@ -72,6 +74,14 @@ class Extensions:
         that already exists in the package: snapshots must regenerate byte for byte (R12.7).
         """
         self.document_template_dirs.insert(0, Path(path))
+
+    # ------------------------------------------------------------ job intake
+    def add_site_adapter(self, adapter: Any) -> None:
+        """A `adapters.SiteAdapter` that reads one site's posting pages (PRD R13.16)."""
+        from .adapters import validate_adapter
+
+        validate_adapter(adapter)
+        self.site_adapters.append(adapter)
 
 
 Plugin = Any  # an object with register(ext), or a callable taking ext

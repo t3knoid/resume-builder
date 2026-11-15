@@ -4,13 +4,16 @@ pieces they use.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
-from .. import postingtext
+from .. import posting_fields, postingtext
+from ..adapters import MAX_FETCHES, AdapterCapture, adapter_for, host_matches
 from ..clock import now_iso
 from ..errors import Conflict, NotFound, ValidationFailed
 from ..fetch import FetchedPage, FetchFailed, FetchLimits
-from ..models import PostingCapture
+from ..models import ExtractedField, PostingCapture
+from ..posting_fields import Extraction
 from ..security import RequestContext
 from ..space import UserSpace
 
@@ -117,3 +120,77 @@ def attach_posting(space: UserSpace, ctx: RequestContext, job_id: str, capture: 
             "note": None if file_updated else
             f"jobs/{job_id}/posting.md has edits that haven't synced, so it wasn't changed. Sync will show a conflict; "
             "run `rb resolve` to pick a version."}
+
+
+# ---------------------------------------------------------------- capturing a URL, with or without a site adapter
+
+@dataclass
+class UrlCapture:
+    capture: PostingCapture
+    extraction: Extraction
+    adapter: str | None = None
+    notes: list[str] = field(default_factory=list)
+
+
+def capture_url(space: UserSpace, ctx: RequestContext, url: str) -> UrlCapture:
+    """Fetch a posting URL and turn it into a capture with extracted fields (nothing is stored).
+
+    A site adapter registered for the URL's domain reads the page instead of the generic path
+    (R13.16), under the same checks.
+    """
+    adapter = adapter_for(space.app.extensions.site_adapters, url)
+    if adapter is not None:
+        return _capture_with_adapter(space, ctx, url, adapter)
+    capture = capture_from_page(fetch_posting(space, ctx, url))
+    return UrlCapture(capture, posting_fields.extract(capture))
+
+
+def _capture_with_adapter(space: UserSpace, ctx: RequestContext, url: str, adapter) -> UrlCapture:
+    fetched: list[FetchedPage] = []
+
+    def fetch(target: str) -> FetchedPage:
+        host = (urlsplit(target).hostname or "").lower()
+        if not any(host_matches(host, d) for d in adapter.domains):
+            raise FetchFailed("adapter-domain", f"The site adapter `{adapter.name}` may only fetch from its own sites, not `{host or target}`.")
+        if len(fetched) >= MAX_FETCHES:
+            raise FetchFailed("adapter-limit", f"The site adapter `{adapter.name}` tried to make more than {MAX_FETCHES} requests.")
+        page = fetch_posting(space, ctx, target)
+        fetched.append(page)
+        return page
+
+    try:
+        result = adapter.capture(url, fetch)
+    except FetchFailed:
+        raise
+    except Exception as exc:
+        space.audit(ctx, "posting:adapter", target=adapter.name, result=f"failed: {type(exc).__name__}")
+        raise FetchFailed("adapter-error", f"The site adapter `{adapter.name}` couldn't read this page.") from exc
+    if not isinstance(result, AdapterCapture) or not any(result.page is p for p in fetched):
+        space.audit(ctx, "posting:adapter", target=adapter.name, result="failed: page not fetched through intake")
+        raise FetchFailed("adapter-error", f"The site adapter `{adapter.name}` didn't return a page it fetched through intake.")
+
+    page, notes = result.page, []
+    markdown = None
+    if result.markdown is not None:
+        md = postingtext.text_to_markdown(result.markdown)
+        if md.strip() and postingtext.wording_preserved(md, page.text, page.content_type):
+            markdown = md
+        else:
+            notes.append(f"The site adapter `{adapter.name}` changed the posting's wording, so its text wasn't used; "
+                         "the page was converted directly.")
+    if markdown is None:
+        capture = capture_from_page(page).model_copy(update={"source_url": url})
+    else:
+        capture = PostingCapture(source_kind="url", source_url=url, content_type=page.content_type,
+                                 raw_content=page.text, markdown=markdown, captured_at=page.fetched_at)
+
+    good: list[ExtractedField] = []
+    for f in result.fields:
+        f = f.model_copy(update={"origin": "adapter"})
+        problems = posting_fields.verify(capture, [f])
+        if problems:
+            notes.append(f"The site adapter `{adapter.name}` gave a value for {f.name} that the posting doesn't state; it was ignored.")
+        else:
+            good.append(f)
+    space.audit(ctx, "posting:adapter", target=adapter.name, result="ok")
+    return UrlCapture(capture, posting_fields.extract(capture, first=good), adapter=adapter.name, notes=notes)

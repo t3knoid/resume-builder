@@ -390,6 +390,33 @@ def _job_posting_title(blocks: list[str]) -> str | None:
     return None
 
 
+def _plain_words(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+", text.lower())
+
+
+def visible_text(html: str) -> str:
+    """The page's text with tags, scripts and styles removed (entities decoded), plus the text of any
+    embedded JobPosting description."""
+    import html as htmllib
+
+    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1\s*>", " ", html, flags=re.S | re.I)
+    parts = [htmllib.unescape(re.sub(r"<[^>]+>", " ", body))]
+    for jp in job_postings(html):
+        for key in ("title", "description"):
+            if isinstance(jp.get(key), str):
+                parts.append(htmllib.unescape(re.sub(r"<[^>]+>", " ", jp[key])))
+    return "\n".join(parts)
+
+
+def wording_preserved(markdown: str, raw: str, content_type: str) -> bool:
+    """True when every word of `markdown` appears in the captured page, in the same order: nothing
+    added, reworded or reordered (R13.11). List numbers are formatting and don't count."""
+    md = re.sub(r"^\s*\d+[.)]\s", "", markdown, flags=re.M)
+    source = visible_text(raw) if content_type == "text/html" else raw
+    it = iter(_plain_words(source))
+    return all(w in it for w in _plain_words(md))
+
+
 def text_to_markdown(text: str) -> str:
     """Pasted or plain text is kept as is; only line endings and trailing spaces are normalized."""
     return _tidy(text)
