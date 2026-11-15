@@ -18,7 +18,9 @@
 <div class="card">
   <h2>AI agent</h2>
   {% if agent.state == "connected" %}
-    <p class="ok">Connected{% if agent.last_channel %} through {{ {"mcp": "MCP", "api": "the HTTP API", "cli": "copy and paste (rb propose)"}.get(agent.last_channel, agent.last_channel) }}{% endif %}. Last active {{ agent.last_active }}.</p>
+    <p class="ok">Connected through {{ {"mcp": "MCP", "api": "the HTTP API"}.get(agent.direct_channel, agent.direct_channel) }}, last on {{ agent.direct_active }}.{% if agent.last_channel == "cli" %} Most recently used through copy and paste ({{ agent.last_active }}).{% endif %}</p>
+  {% elif agent.state == "copy_and_paste" %}
+    <p class="stale">Used through copy and paste (<code>rb propose</code>), last on {{ agent.last_active }}. No assistant has connected directly.</p>
   {% elif agent.state == "token_unused" %}
     <p class="stale">An agent token was issued on {{ agent.channels.api.token_issued[:10] }} but hasn't been used yet.</p>
   {% else %}

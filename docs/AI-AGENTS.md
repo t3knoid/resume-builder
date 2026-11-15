@@ -7,7 +7,7 @@ Whatever the assistant, it works as the **agent**: it can only propose drafts, a
 ## Contents
 
 1. [Three ways to connect](#1-three-ways-to-connect)
-2. [Before you start](#2-before-you-start)
+2. [Setting up](#2-setting-up): install, connect and verify your assistant
 3. [Claude](#3-claude): Claude Code, Claude Desktop, claude.ai
 4. [Gemini](#4-gemini): Gemini CLI, Gemini in the browser
 5. [ChatGPT](#5-chatgpt): Codex CLI, ChatGPT in the browser or app
@@ -62,61 +62,133 @@ The assistants that use resume-builder's tools directly (MCP) differ. As of Nove
 
 Plans, limits and prices change often; the provider's own pricing page is the authority. If you just want to try resume-builder, start with copy and paste on a free chat assistant, or with Claude Desktop, Gemini CLI or Codex CLI, which connect directly on a free plan.
 
-## 2. Before you start
+## 2. Setting up
 
-1. resume-builder is installed and has run at least once (`docker compose up -d --build`; see the [quick start](QUICKSTART.md)). Building first matters: an MCP client can't wait for a build.
-2. You've added a job with its posting (`rb new-job <link to the posting>`, or `rb new-job` and then pasting the posting into `posting.md`), and written your `interest_notes` in its `application.yaml`.
-3. Some content in `base.yaml` is `confirmed`. The agent can only use confirmed items.
+Do these four steps in order. Steps 1 and 2 happen once. Step 3 explains what connecting involves; your assistant's own section (3 to 6) has the exact clicks and files. Step 4 confirms it works. On Windows, also read [On Windows](#on-windows) at the end of this section.
 
-**Checking it worked:** after setting up your assistant, ask it to call `agent_brief` for a job (or to list your applications). The **AI agent** card on the tracker's home page, and `rb status`, then say "Connected" with the channel (MCP or HTTP API) and when; for MCP it also shows your assistant's name if it sends one. If it still says "No AI agent has connected yet", the assistant hasn't reached resume-builder: see Troubleshooting (section 10).
+### Step 1: Install resume-builder and add a job
 
-### The MCP command
+1. Install resume-builder and start it once: `docker compose up -d --build` (see the [quick start](QUICKSTART.md)). Building first matters: an MCP assistant can't wait for a build.
+2. Add a job with its posting: `rb new-job <link to the posting>` (or `rb new-job`, then paste the posting into `posting.md`), and write your `interest_notes` in its `application.yaml`.
+3. Mark some content in `base.yaml` as `confirmed`. The agent can only use confirmed items.
 
-Every MCP setup below uses the same command, with your own path to the resume-builder folder:
+### Step 2: Install your assistant
 
-```text
-docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp
-```
+**Chat assistants in a browser** (claude.ai, Gemini, ChatGPT, Microsoft Copilot) need nothing installed. **Claude Desktop** and **VS Code** are ordinary apps: install them as usual. Skip to step 3.
 
-- `-f` with a **full path** lets the assistant start it from any folder.
-- `-T` is required: MCP talks over standard input and output, which must not be a terminal.
-- With more than one user folder, add your name: `... app rb --user <you> mcp`.
-- **Desktop apps** (Claude Desktop, VS Code launched from the Dock or Start menu) may not find `docker` on their PATH. Use the full path to the Docker program: run `which docker` (macOS/Linux; usually `/usr/local/bin/docker` on macOS, `/usr/bin/docker` on Linux) or `where docker` (Windows; usually `C:\Program Files\Docker\Docker\resources\bin\docker.exe`).
-- In JSON on Windows, double every backslash: `"C:\\Users\\you\\resume-builder\\compose.yaml"`.
+The **terminal assistants** (Claude Code, Gemini CLI, Codex CLI, GitHub Copilot CLI) are separate programs. Install the one you'll use, once, with the command below. This is the only place this guide gives install commands.
 
-Test it by hand. It should print a "ready" line, then wait. Press Ctrl+C to stop.
+**Claude Code** (its command is `claude`), with Anthropic's installer:
 
 ```sh
-docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp
-# resume-builder MCP server for `you` ready (27 tools).
+curl -fsSL https://claude.ai/install.sh | bash          # macOS, Linux
 ```
 
-### Install your assistant and check it's on your PATH
+```powershell
+irm https://claude.ai/install.ps1 | iex                 # Windows PowerShell
+```
 
-The terminal assistants (Claude Code, Gemini CLI, Codex CLI, GitHub Copilot CLI) are separate programs you install first. Each is started by a command; that command must be on your PATH, or the steps below fail with "command not found" (macOS, Linux) or "is not recognized" (Windows).
+**Gemini CLI** (`gemini`), **Codex CLI** (`codex`) and **GitHub Copilot CLI** (`copilot`), with npm, which comes with [Node.js](https://nodejs.org) (install a current LTS version first). Run only the line for your assistant; the lines are the same in macOS and Linux terminals and in Windows PowerShell:
 
-| Assistant | Command | Install (see its own documentation for the current steps) |
+```sh
+npm install -g @google/gemini-cli     # Gemini CLI
+npm install -g @openai/codex          # Codex CLI
+npm install -g @github/copilot        # GitHub Copilot CLI
+```
+
+Then **open a new terminal** and check that the command is found:
+
+```sh
+claude --version      # or: gemini --version, codex --version, copilot --version (same on every system)
+```
+
+If it says "command not found" (macOS, Linux) or "is not recognized" (Windows), the program is installed in a folder that isn't on your PATH:
+
+- Claude Code's installer prints that folder when it finishes (often `~/.local/bin`, or `%USERPROFILE%\.local\bin` on Windows).
+- For npm, `npm prefix -g` shows it (on macOS and Linux add `/bin` to it; on Windows it's the folder itself).
+
+Add the folder to your PATH, open a new terminal and check again. Install commands change from time to time; if one fails, follow the assistant's own setup guide.
+
+### Step 3: Connect your assistant
+
+Follow the setup section for your assistant. It adds resume-builder to the assistant (a command to run, or a settings file to edit) and says where to check the result:
+
+| Assistant | How it connects | Setup |
 | --- | --- | --- |
-| Claude Code | `claude` | Anthropic's installer, or `npm install -g @anthropic-ai/claude-code` (section 3) |
-| Gemini CLI | `gemini` | `npm install -g @google/gemini-cli` |
-| Codex CLI | `codex` | `npm install -g @openai/codex` |
-| GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
+| Claude Code | MCP | [Claude Code](#claude-code-recommended) |
+| Claude Desktop | MCP | [Claude Desktop](#claude-desktop) |
+| claude.ai (browser or mobile) | Copy and paste | [claude.ai](#claudeai-browser-or-mobile-copy-and-paste) |
+| Gemini CLI | MCP | [Gemini CLI](#gemini-cli-recommended) |
+| Gemini in the browser | Copy and paste | [Gemini in the browser](#gemini-in-the-browser-geminigooglecom-copy-and-paste) |
+| ChatGPT (browser or desktop app) | Copy and paste | [ChatGPT](#chatgpt-in-the-browser-or-desktop-app-copy-and-paste) |
+| Codex CLI | MCP | [Codex CLI](#codex-cli-mcp) |
+| GitHub Copilot in VS Code | MCP | [GitHub Copilot in VS Code](#github-copilot-in-vs-code-agent-mode-recommended) |
+| GitHub Copilot CLI | MCP | [GitHub Copilot CLI](#github-copilot-cli) |
+| Microsoft Copilot | Copy and paste | [Microsoft Copilot](#microsoft-copilot-copilotmicrosoftcom-microsoft-365-copilot-copy-and-paste) |
+| Anything else (Cursor, Windsurf, Zed, your own scripts) | MCP or HTTP API | [Other tools](#7-other-tools) |
 
-The `npm` lines need [Node.js](https://nodejs.org) (a current LTS version). Package names and installers change; if one fails, follow the assistant's own setup guide.
+Every MCP setup gives the assistant the same command to start resume-builder; it's explained, and tested, in [step 4](#step-4-verify-your-assistant). These parts are the same for every assistant:
 
-Then **open a new terminal** and check, for example:
+**a. A working folder outside resume-builder.** Coding assistants (Claude Code, Gemini CLI, Codex CLI, Copilot agent mode) can also edit files. If one edits files in `data/<you>/` directly, the change syncs as **yours**, skipping the agent's checks. So start the assistant in a **separate, empty folder**, never inside resume-builder or your data folder.
 
-```sh
-gemini --version
-```
+**b. Standing instructions (optional, recommended).** `rb agent-instructions` prints the rules every assistant should follow. MCP assistants also receive them automatically when they connect, but saving them in the file your assistant reads keeps long sessions on track:
 
-If the command isn't found, the installer put it in a folder that isn't on your PATH. For npm installs, `npm prefix -g` shows that folder (on macOS and Linux add `/bin` to it; on Windows it's the folder itself). Add it to your PATH, open a new terminal and check again.
+| Assistant | Save `rb agent-instructions --for mcp` as |
+| --- | --- |
+| Claude Code | `CLAUDE.md` in the working folder |
+| Gemini CLI | `GEMINI.md` in the working folder |
+| Codex CLI | `AGENTS.md` in the working folder |
+| GitHub Copilot in VS Code | `.github/copilot-instructions.md` in the working folder |
+| Claude Desktop | the instructions of a Claude **Project** |
 
-Claude Desktop and VS Code are ordinary apps: install them as usual; there's no command to check.
+For copy and paste, use `rb agent-instructions --for chat` (it includes the reply format); for scripts using the HTTP API, `--for api`.
+
+**c. Copy and paste instead.** With a chat assistant in a browser there's nothing to connect. You paste `rb brief <job-id>` into the chat, and paste each block it returns into resume-builder with `rb propose` (the `rb` command: install it once with `scripts/install-rb.sh`, or `scripts\install-rb.cmd` on Windows; see the user manual):
+
+| System | Command |
+| --- | --- |
+| macOS | `pbpaste \| rb propose <job-id> profile` |
+| Linux (X11) | `xclip -o -selection clipboard \| rb propose <job-id> profile` |
+| Linux (Wayland) | `wl-paste \| rb propose <job-id> profile` |
+| Windows (PowerShell) | `Get-Clipboard \| rb propose <job-id> profile` |
+
+The last word is what you pasted: `profile`, `fit_report`, `cover_letter` or `answer`. A surrounding ```` ```yaml ```` fence is fine. `rb propose` submits as the **agent**, so pasted drafts get exactly the same checks as an MCP-connected one. If something fails, it prints the problems; paste them back to the assistant.
+
+### Step 4: Verify your assistant
+
+1. **Test the MCP command by hand** (MCP assistants). This is the command your assistant's setup gave it; each time you start a session, the assistant runs it to start resume-builder, and stops it when you quit. With your own path to the resume-builder folder:
+
+   ```sh
+   docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp          # macOS, Linux
+   ```
+
+   ```powershell
+   docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm -T app rb mcp      # Windows PowerShell
+   ```
+
+   What its parts mean:
+
+   - `-f` with a **full path** lets the assistant start it from the working folder (or any folder).
+   - `-T` is required: MCP talks over standard input and output, which must not be a terminal.
+   - With more than one user folder, add your name: `... app rb --user <you> mcp`.
+   - **Desktop apps** (Claude Desktop, VS Code launched from the Dock or Start menu) may not find `docker` on their PATH. In their settings, use the full path to the Docker program: run `which docker` (macOS/Linux; usually `/usr/local/bin/docker` on macOS, `/usr/bin/docker` on Linux) or `where docker` (Windows; usually `C:\Program Files\Docker\Docker\resources\bin\docker.exe`).
+
+   Run it, and it prints a "ready" line, for example `resume-builder MCP server for you ready (27 tools).`, and then **doesn't return to the prompt**: that's expected, it's a server waiting for an assistant to talk to it. Check that the name is your user folder. To see it answer, paste `{"jsonrpc":"2.0","id":1,"method":"ping"}` and press Enter: it replies `{"jsonrpc": "2.0", "id": 1, "result": {}}`.
+
+   Then press **Ctrl+C** to stop it. This is only a test; don't leave it running. If it fails here, fix that first: the assistant can't do better than this command.
+
+2. **Check the tools in your assistant.** Most terminal assistants have `/mcp`, which should list resume-builder as connected, with its tools; desktop apps show them in their tools menu. Your assistant's section says where.
+
+3. **Ask it to do something**, for example to call `agent_brief` for one of your jobs, or to list your applications. Then look at the **AI agent** card on the tracker's home page, or run `rb status`:
+   - **Connected**, with the channel (MCP or HTTP API) and when; for MCP also your assistant's name if it sends one. It works.
+   - **Used through copy and paste**: only drafts pasted with `rb propose` have arrived. That's expected for copy and paste; for an MCP assistant it means it hasn't reached resume-builder.
+   - **No AI agent has connected yet**: nothing has reached resume-builder.
+
+   If it isn't connected, see [Troubleshooting](#10-troubleshooting).
 
 ### On Windows
 
-The examples in this guide use macOS and Linux syntax. In **Windows PowerShell**:
+Every command in this guide is shown for macOS and Linux and for Windows PowerShell. These notes explain the Windows differences, for anything you adapt yourself:
 
 - **Working folder:** `mkdir $HOME\resume-agent; cd $HOME\resume-agent` (instead of `mkdir -p ~/resume-agent && cd ~/resume-agent`).
 - **Paths:** use your Windows path, for example `C:\Users\you\resume-builder\compose.yaml`. In JSON files, double every backslash: `"C:\\Users\\you\\resume-builder\\compose.yaml"`. In TOML files (Codex), use single quotes, which take the path as written: `'C:\Users\you\resume-builder\compose.yaml'`.
@@ -129,43 +201,6 @@ The examples in this guide use macOS and Linux syntax. In **Windows PowerShell**
   (PowerShell 7 writes UTF-8 with `>`, so either form works there.)
 - **Folders for instruction files:** `mkdir .github` (instead of `mkdir -p .github`).
 
-### Keep coding agents out of your data folder
-
-Coding assistants (Claude Code, Gemini CLI, Codex CLI, Copilot agent mode) can also edit files. If one edits files in `data/<you>/` directly, the change syncs as **yours**, skipping the agent's checks. So:
-
-- start the assistant in a **separate, empty folder** (for example `~/resume-agent`), not inside resume-builder or your data folder; the MCP command's full `-f` path makes this work;
-- and tell it to use only the resume-builder tools (the standing instructions below say so).
-
-### Standing instructions
-
-`rb agent-instructions` prints the rules every assistant should follow, in three versions:
-
-```sh
-rb agent-instructions --for mcp     # for MCP-connected assistants
-rb agent-instructions --for chat    # for copy-and-paste (includes the reply format)
-rb agent-instructions --for api     # for scripts using the HTTP API
-```
-
-MCP assistants also receive these automatically when they connect, so adding them to the assistant's own instructions file is optional, but it helps keep long sessions on track.
-
-### The copy-and-paste helpers
-
-These use the `rb` command (install it once with `scripts/install-rb.sh`, or `scripts\install-rb.cmd` on Windows; see the user manual). Text piped into `rb` goes straight through to the app.
-
-Paste from the clipboard into resume-builder:
-
-| System | Command |
-| --- | --- |
-| macOS | `pbpaste \| rb propose <job-id> profile` |
-| Linux (X11) | `xclip -o -selection clipboard \| rb propose <job-id> profile` |
-| Linux (Wayland) | `wl-paste \| rb propose <job-id> profile` |
-| Windows (PowerShell) | `Get-Clipboard \| rb propose <job-id> profile` |
-
-The last word is what you pasted: `profile`, `fit_report`, `cover_letter` or `answer`. A surrounding
-```` ```yaml ```` fence is fine. `rb propose` submits as the **agent**, so pasted drafts get exactly
-the same checks as an MCP-connected one. If something fails, it prints the problems; paste them back
-to the assistant.
-
 ---
 
 ## 3. Claude
@@ -174,23 +209,7 @@ to the assistant.
 
 Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claude` command, and it supports MCP directly. These steps use only a terminal. It needs a paid Claude plan or an Anthropic API account ([Do I need a paid AI plan?](#do-i-need-a-paid-ai-plan)).
 
-1. Install Claude Code, if you haven't, following Anthropic's Claude Code setup guide. At the time of writing, the installer is one line:
-
-   ```sh
-   curl -fsSL https://claude.ai/install.sh | bash          # macOS, Linux
-   ```
-
-   ```powershell
-   irm https://claude.ai/install.ps1 | iex                 # Windows PowerShell
-   ```
-
-   (With Node.js installed, `npm install -g @anthropic-ai/claude-code` works too.) Then **open a new terminal** and check that the command is found:
-
-   ```sh
-   claude --version
-   ```
-
-   If it says "command not found" (macOS, Linux) or "is not recognized" (Windows), the installer put `claude` in a folder that isn't on your PATH yet. It prints that folder when it finishes (often `~/.local/bin`, or `%USERPROFILE%\.local\bin` on Windows). Add the folder to your PATH, or open a new terminal if the installer already did, and try again. Anthropic's setup guide covers anything else the installer asks for on your system.
+1. Install Claude Code and check that `claude --version` works in a new terminal ([section 2, step 2](#step-2-install-your-assistant)).
 
 2. Make a working folder for job-search sessions, outside resume-builder, and go into it:
 
@@ -208,11 +227,15 @@ Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claud
    claude mcp add resume-builder -- docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp
    ```
 
+Use the following equivalent in Windows Powershell.
+
    ```powershell
    claude mcp add resume-builder -- docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm -T app rb mcp
    ```
 
-   This registers it for this folder. Add `--scope user` before the name to make it available everywhere, or `--scope project` to save it in a `.mcp.json` file in this folder. With more than one user folder, add `--user <you>` before `mcp`.
+   It prints `Added stdio MCP server resume-builder ...`. If you don't see that line, nothing was saved: fix the error it printed and run it again. Check it with `claude mcp list` (in the same folder): resume-builder should be listed as `Connected`.
+
+   This registers it **for this folder only**: Claude Code shows it when you start `claude` in this folder, not elsewhere (for example, not in an IDE window opened on another folder). Add `--scope user` before the name to make it available everywhere, or `--scope project` to save it in a `.mcp.json` file in this folder. With more than one user folder, add `--user <you>` before `mcp`.
 
    **No `claude` command?** (for example, you use Claude Code only inside an IDE): create the file `.mcp.json` in the working folder yourself; it does the same:
 
@@ -227,15 +250,17 @@ Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claud
    }
    ```
 
-   On Windows, write the path with doubled backslashes, for example `"C:\\Users\\you\\resume-builder\\compose.yaml"`. If `docker` isn't found, put its full path in `"command"` (see [The MCP command](#the-mcp-command)). Claude Code asks you to approve the project's MCP server the first time.
+   On Windows, write the path with doubled backslashes, for example `"C:\\Users\\you\\resume-builder\\compose.yaml"`. If `docker` isn't found, put its full path in `"command"` (see [section 2, step 4](#step-4-verify-your-assistant)). Claude Code asks you to approve the project's MCP server the first time.
 
 4. Optional: save the standing instructions where Claude Code reads them:
 
    ```sh
-   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > CLAUDE.md
+   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > CLAUDE.md   # macOS, Linux
    ```
 
-   In Windows PowerShell 5.1, write it as `... rb agent-instructions --for mcp | Out-File -Encoding utf8 CLAUDE.md` (see [On Windows](#on-windows)).
+   ```powershell
+   docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm app rb agent-instructions --for mcp | Out-File -Encoding utf8 CLAUDE.md   # Windows PowerShell
+   ```
 
 5. Start Claude Code in that folder (`claude`) and check the connection with `/mcp`: resume-builder should be listed as connected, with its tools. The **AI agent** card on the tracker's home page says "Connected through MCP" once it has used a tool.
 
@@ -266,6 +291,19 @@ Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claud
    }
    ```
 
+   On Windows (backslashes doubled; `where docker` shows Docker's path):
+
+   ```json
+   {
+     "mcpServers": {
+       "resume-builder": {
+         "command": "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+         "args": ["compose", "-f", "C:\\Users\\you\\resume-builder\\compose.yaml", "run", "--rm", "-T", "app", "rb", "mcp"]
+       }
+     }
+   }
+   ```
+
    If the file already has `mcpServers`, add `"resume-builder": {...}` inside it.
 
 3. Quit Claude Desktop completely and reopen it. resume-builder's tools appear in the tools
@@ -283,16 +321,28 @@ Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claud
 2. For each job, start a chat in the project and paste the brief:
 
    ```sh
-   rb brief <job-id> | pbcopy        # macOS; or run `rb brief <job-id>` and copy the output
+   rb brief <job-id> | pbcopy                            # macOS
+   rb brief <job-id> | xclip -selection clipboard        # Linux (X11); Wayland: | wl-copy
    ```
+
+   ```powershell
+   rb brief <job-id> | Set-Clipboard                     # Windows PowerShell
+   ```
+
+   Or run `rb brief <job-id>` and copy the output.
 
 3. Ask: "Tailor this. Give me the profile.yaml and fit-report.md blocks." Add "and a why-here
    answer" or "and a cover letter" if you want them.
 4. Copy each block Claude returns and pipe it in:
 
    ```sh
-   pbpaste | rb propose <job-id> profile
+   pbpaste | rb propose <job-id> profile        # macOS (Linux: xclip -o -selection clipboard, or wl-paste)
    pbpaste | rb propose <job-id> fit_report
+   ```
+
+   ```powershell
+   Get-Clipboard | rb propose <job-id> profile        # Windows PowerShell
+   Get-Clipboard | rb propose <job-id> fit_report
    ```
 
 5. If `rb propose` reports problems, paste them back into the chat and ask Claude to fix exactly those.
@@ -306,9 +356,9 @@ Claude Code is Anthropic's coding agent. You run it in a terminal, as the `claud
 Gemini CLI is Google's open-source agent for the terminal. It supports MCP servers configured in a
 `settings.json` file.
 
-1. Install Gemini CLI and check that `gemini --version` works in a new terminal ([Install your assistant](#install-your-assistant-and-check-its-on-your-path)).
+1. Install Gemini CLI and check that `gemini --version` works in a new terminal ([section 2, step 2](#step-2-install-your-assistant)).
 
-2. Make a working folder outside resume-builder: `mkdir -p ~/resume-agent && cd ~/resume-agent` (Windows: [On Windows](#on-windows)).
+2. Make a working folder outside resume-builder: `mkdir -p ~/resume-agent && cd ~/resume-agent` (Windows PowerShell: `mkdir $HOME\resume-agent; cd $HOME\resume-agent`).
 
 3. Create `.gemini/settings.json` in that folder (or edit `~/.gemini/settings.json` to make it
    available everywhere):
@@ -325,12 +375,22 @@ Gemini CLI is Google's open-source agent for the terminal. It supports MCP serve
    }
    ```
 
-   `timeout` (milliseconds) gives Docker time to start the container on the first call. On Windows, double the backslashes in the path.
+   `timeout` (milliseconds) gives Docker time to start the container on the first call.
 
-4. Optional: save the standing instructions as `GEMINI.md`, which Gemini CLI reads as context (Windows PowerShell 5.1: use `Out-File -Encoding utf8`, see [On Windows](#on-windows)):
+   On Windows, the `"args"` line uses your Windows path with every backslash doubled:
+
+   ```json
+   "args": ["compose", "-f", "C:\\Users\\you\\resume-builder\\compose.yaml", "run", "--rm", "-T", "app", "rb", "mcp"]
+   ```
+
+4. Optional: save the standing instructions as `GEMINI.md`, which Gemini CLI reads as context:
 
    ```sh
-   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > GEMINI.md
+   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > GEMINI.md   # macOS, Linux
+   ```
+
+   ```powershell
+   docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm app rb agent-instructions --for mcp | Out-File -Encoding utf8 GEMINI.md   # Windows PowerShell
    ```
 
 5. Start `gemini` in that folder and run `/mcp`: resume-builder should be listed with its tools.
@@ -349,7 +409,7 @@ Gemini CLI is Google's open-source agent for the terminal. It supports MCP serve
    start of each chat.
 2. Paste `rb brief <job-id>` into a chat with the Gem.
 3. Ask for the profile.yaml and fit-report.md blocks (plus a letter or answer if you want one).
-4. Copy each block and pipe it in: `pbpaste | rb propose <job-id> profile`, and so on.
+4. Copy each block and pipe it in: `pbpaste | rb propose <job-id> profile` (macOS), `Get-Clipboard | rb propose <job-id> profile` (Windows PowerShell), and so on; Linux commands are in [section 2, step 3](#step-3-connect-your-assistant).
 5. Paste any problems back and ask Gemini to fix exactly those.
 
 Gemini Code Assist in VS Code can also use MCP servers in its agent mode, using the same
@@ -371,9 +431,15 @@ ChatGPT's own connectors need a server on the internet, so use copy and paste:
 4. Copy each block and pipe it in:
 
    ```sh
-   pbpaste | rb propose <job-id> profile
+   pbpaste | rb propose <job-id> profile        # macOS (Linux: xclip -o -selection clipboard, or wl-paste)
    pbpaste | rb propose <job-id> fit_report
    pbpaste | rb propose <job-id> answer
+   ```
+
+   ```powershell
+   Get-Clipboard | rb propose <job-id> profile        # Windows PowerShell
+   Get-Clipboard | rb propose <job-id> fit_report
+   Get-Clipboard | rb propose <job-id> answer
    ```
 
 5. Paste any problems back and ask ChatGPT to fix exactly those.
@@ -383,9 +449,9 @@ ChatGPT's own connectors need a server on the internet, so use copy and paste:
 Codex CLI is OpenAI's coding agent for the terminal; you can sign in with your ChatGPT account. It
 supports MCP servers configured in `~/.codex/config.toml`.
 
-1. Install Codex CLI and check that `codex --version` works in a new terminal ([Install your assistant](#install-your-assistant-and-check-its-on-your-path)).
+1. Install Codex CLI and check that `codex --version` works in a new terminal ([section 2, step 2](#step-2-install-your-assistant)).
 
-2. Make a working folder outside resume-builder: `mkdir -p ~/resume-agent && cd ~/resume-agent` (Windows: [On Windows](#on-windows)).
+2. Make a working folder outside resume-builder: `mkdir -p ~/resume-agent && cd ~/resume-agent` (Windows PowerShell: `mkdir $HOME\resume-agent; cd $HOME\resume-agent`).
 
 3. Add to `~/.codex/config.toml` (on Windows, `%USERPROFILE%\.codex\config.toml`):
 
@@ -395,12 +461,20 @@ supports MCP servers configured in `~/.codex/config.toml`.
    args = ["compose", "-f", "/path/to/resume-builder/compose.yaml", "run", "--rm", "-T", "app", "rb", "mcp"]
    ```
 
-   On Windows, put the path in single quotes: `'C:\Users\you\resume-builder\compose.yaml'`.
+   On Windows, put the path in single quotes, which take it as written:
 
-4. Optional: save the standing instructions as `AGENTS.md`, which Codex reads (Windows PowerShell 5.1: use `Out-File -Encoding utf8`, see [On Windows](#on-windows)):
+   ```toml
+   args = ["compose", "-f", 'C:\Users\you\resume-builder\compose.yaml', "run", "--rm", "-T", "app", "rb", "mcp"]
+   ```
+
+4. Optional: save the standing instructions as `AGENTS.md`, which Codex reads:
 
    ```sh
-   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > AGENTS.md
+   docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > AGENTS.md   # macOS, Linux
+   ```
+
+   ```powershell
+   docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm app rb agent-instructions --for mcp | Out-File -Encoding utf8 AGENTS.md   # Windows PowerShell
    ```
 
 5. Start `codex` in that folder. Run `/mcp` to confirm resume-builder and its tools are listed.
@@ -408,7 +482,7 @@ supports MCP servers configured in `~/.codex/config.toml`.
 6. Ask Codex to tailor a job by its id using the resume-builder tools, as in the other examples.
 
 If Codex reports a timeout starting the server, start the container once by hand first (the command
-in section 2) so the image is ready. If it still times out, increase the MCP startup timeout described
+in section 2, step 4) so the image is ready. If it still times out, increase the MCP startup timeout described
 in Codex's documentation.
 
 ---
@@ -420,7 +494,7 @@ in Codex's documentation.
 VS Code's Copilot Chat can use MCP tools in **Agent** mode.
 
 1. Open a folder for job-search sessions that is **not** resume-builder or your data folder (for
-   example `~/resume-agent`): File → Open Folder.
+   example `~/resume-agent` on macOS and Linux, `C:\Users\you\resume-agent` on Windows): File → Open Folder.
 
 2. Create `.vscode/mcp.json` in it:
 
@@ -436,8 +510,14 @@ VS Code's Copilot Chat can use MCP tools in **Agent** mode.
    }
    ```
 
+   On Windows, the `"args"` line uses your Windows path with every backslash doubled:
+
+   ```json
+   "args": ["compose", "-f", "C:\\Users\\you\\resume-builder\\compose.yaml", "run", "--rm", "-T", "app", "rb", "mcp"]
+   ```
+
    (Or run **MCP: Add Server** from the Command Palette, choose a command-based (stdio) server, and
-   enter the same command.) If VS Code can't find `docker`, use its full path (section 2).
+   enter the same command.) If VS Code can't find `docker`, use its full path (section 2, step 4).
 
 3. In `mcp.json`, click **Start** above the server name, or let VS Code start it when needed.
 
@@ -445,11 +525,16 @@ VS Code's Copilot Chat can use MCP tools in **Agent** mode.
    for every chat in this folder:
 
    ```sh
+   # macOS, Linux
    mkdir -p .github
    docker compose -f /path/to/resume-builder/compose.yaml run --rm app rb agent-instructions --for mcp > .github/copilot-instructions.md
    ```
 
-   In Windows PowerShell use `mkdir .github` and `| Out-File -Encoding utf8 .github\copilot-instructions.md` (see [On Windows](#on-windows)).
+   ```powershell
+   # Windows PowerShell
+   mkdir .github
+   docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm app rb agent-instructions --for mcp | Out-File -Encoding utf8 .github\copilot-instructions.md
+   ```
 
 5. Open Copilot Chat, switch the mode to **Agent**, and open the tools picker: make sure the
    resume-builder tools are ticked.
@@ -462,9 +547,10 @@ your administrator.
 
 ### GitHub Copilot CLI
 
-GitHub Copilot CLI (`copilot`) can use local MCP servers too. Install it first and check that `copilot --version` works in a new terminal ([Install your assistant](#install-your-assistant-and-check-its-on-your-path)). Then, in a Copilot CLI session, run
+GitHub Copilot CLI (`copilot`) can use local MCP servers too. Install it first and check that `copilot --version` works in a new terminal ([section 2, step 2](#step-2-install-your-assistant)). Then, in a Copilot CLI session, run
 `/mcp add`, choose a local (stdio) server, name it `resume-builder`, and enter the same command:
-`docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp`. Start it from an
+`docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp` (Windows:
+`docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm -T app rb mcp`). Start it from an
 empty working folder, as with the other coding agents. Menus vary between versions; GitHub's
 documentation for Copilot CLI has the current steps.
 
@@ -486,10 +572,19 @@ Most use the same JSON shape as Claude Desktop: `command` plus `args`.
 **Your own scripts** can use the HTTP API:
 
 ```sh
+# macOS, Linux
 rb token --actor agent          # shown once; replaces any previous agent token
 curl -s http://localhost:8000/api/<you>/agent_brief \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{"job_id": "<job-id>", "mode": "api"}'
+```
+
+```powershell
+# Windows PowerShell
+rb token --actor agent          # shown once; replaces any previous agent token
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/<you>/agent_brief `
+  -Headers @{ Authorization = "Bearer <token>" } -ContentType "application/json" `
+  -Body '{"job_id": "<job-id>", "mode": "api"}'
 ```
 
 All operations and their input formats are documented at <http://localhost:8000/docs>. Problems come
@@ -550,12 +645,14 @@ The agent can't create the job, fill in your `interest_notes`, or add companies.
 
 | Problem | Fix |
 | --- | --- |
-| The home page says "No AI agent has connected yet" after setup | The assistant hasn't reached resume-builder. For MCP, run the MCP command from section 2 by hand and look for "ready"; then restart the assistant. For the HTTP API, check the token and that the address is `localhost` or `127.0.0.1`. |
+| The home page says "No AI agent has connected yet" or "Used through copy and paste" after setup | The assistant hasn't reached resume-builder. For MCP, run the MCP command from section 2 by hand and look for "ready"; then restart the assistant. For the HTTP API, check the token and that the address is `localhost` or `127.0.0.1`. |
 | The home page says the assistant used a token that's "no longer valid" | You replaced the token with `rb token`. Issue a new one with `rb token --actor agent` and update your assistant's settings. |
-| The assistant says the server failed to start or timed out | Run the MCP command from section 2 by hand. If it builds the image, wait for that to finish and try again. Increase the client's timeout if it has one. |
-| `claude`, `gemini`, `codex` or `copilot`: "command not found" or "is not recognized" | The assistant isn't installed, or its folder isn't on your PATH. See [Install your assistant](#install-your-assistant-and-check-its-on-your-path), then open a new terminal. |
+| The assistant says the server failed to start or timed out | Run the MCP command by hand (section 2, step 4). If it builds the image, wait for that to finish and try again. Increase the client's timeout if it has one. |
+| Claude Code's `/mcp` doesn't list resume-builder | Run `claude mcp list` in your working folder. If resume-builder isn't there, `claude mcp add` didn't save it (it prints `Added stdio MCP server ...` when it does): run it again. If it is there, start `claude` from that same folder; a server added without `--scope user` only shows up there. |
+| `claude mcp add` says `error: unknown option '-f'` (Windows PowerShell) | PowerShell dropped the bare `--`. Quote it: `claude mcp add resume-builder '--' docker compose -f ...` (section 3). |
+| `claude`, `gemini`, `codex` or `copilot`: "command not found" or "is not recognized" | The assistant isn't installed, or its folder isn't on your PATH. See [section 2, step 2](#step-2-install-your-assistant), then open a new terminal. |
 | The assistant ignores the standing instructions you saved (Windows) | Windows PowerShell 5.1 saved the file as UTF-16. Save it again with `\| Out-File -Encoding utf8 <file>` ([On Windows](#on-windows)). |
-| "command not found: docker" in a desktop app | Use the full path to `docker` as the `command` (section 2). |
+| "command not found: docker" in a desktop app | Use the full path to `docker` as the `command` (section 2, step 4). |
 | "Which user?" | You have several user folders: add `--user <you>` after `rb` in the MCP command. |
 | The tools list is empty or missing tools | The agent only sees what it's allowed to do; approving, confirming and recording events are yours (section 1). |
 | The agent changed files instead of using tools | Start it from an empty folder outside resume-builder, and add the standing instructions. |

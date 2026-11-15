@@ -710,7 +710,10 @@ def print_bootstrap(report: dict) -> None:
             print(f"  Saved documents near the limit: {st['snapshots']['count']} of {st['snapshots']['limit']}")
         agent = st.get("agent") or {}
         if agent.get("state") == "connected":
-            print(f"  AI agent: connected ({agent['last_channel']}), last active {agent['last_active']}")
+            print(f"  AI agent: connected ({agent['direct_channel']}), last active {agent['direct_active']}")
+        elif agent.get("state") == "copy_and_paste":
+            print(f"  AI agent: used through copy and paste (rb propose), last on {agent['last_active']}; "
+                  "no assistant has connected directly (see docs/AI-AGENTS.md)")
         elif agent.get("state") == "token_unused":
             print("  AI agent: token issued, not used yet (see docs/AI-AGENTS.md)")
         else:

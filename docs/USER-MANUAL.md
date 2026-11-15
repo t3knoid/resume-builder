@@ -727,7 +727,7 @@ There are three ways to connect it:
 
 **Step-by-step instructions for each assistant are in [AI-AGENTS.md](AI-AGENTS.md).**
 
-**Is it connected?** The website's home page has an **AI agent** card, and `rb status` has a line, that say whether an agent is connected and through which channel, when it was last active, and what it last did. "No AI agent has connected yet" means nothing has reached the app: check your assistant's setup in [AI-AGENTS.md](AI-AGENTS.md), then ask it to call `agent_brief`. "Token issued, not used yet" means the HTTP API token hasn't been used. If your assistant keeps using an API token you've since replaced with `rb token`, the card says so.
+**Is it connected?** The website's home page has an **AI agent** card, and `rb status` has a line, that say whether an agent is connected and through which channel, when it was last active, and what it last did. "Used through copy and paste" means you've pasted drafts with `rb propose`, but no assistant has connected directly (that's fine if copy and paste is how you work). "No AI agent has connected yet" means nothing has reached the app: check your assistant's setup in [AI-AGENTS.md](AI-AGENTS.md), then ask it to call `agent_brief`. "Token issued, not used yet" means the HTTP API token hasn't been used. If your assistant keeps using an API token you've since replaced with `rb token`, the card says so.
 
 Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `rb discard-event <n>`.
 

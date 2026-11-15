@@ -97,14 +97,21 @@ def summary(space: UserSpace) -> dict:
     for c, at in seen.items():
         if at and (last_active is None or at > last_active):
             last_channel, last_active = c, at
-    if last_active:
+    # "connected" means an assistant reached the app directly (MCP or the HTTP API). Drafts pasted with
+    # `rb propose` arrive as the agent's work on channel cli, but no assistant is wired up (#33).
+    if seen["mcp"] or seen["api"]:
         state = "connected"
     elif token_issued:
         state = "token_unused"
+    elif seen["cli"]:
+        state = "copy_and_paste"
     else:
         state = "not_set_up"
+    direct = [(at, c) for c, at in seen.items() if c in ("mcp", "api") and at]
+    direct_active, direct_channel = max(direct) if direct else (None, None)
     stale_token = bool(refused and (not seen["api"] or refused > seen["api"]))
     return {"state": state, "last_active": last_active, "last_channel": last_channel, "stale_token": stale_token,
+            "direct_channel": direct_channel, "direct_active": direct_active,
             "seen": seen, "token_issued": token_issued, "token_refused": refused}
 
 
@@ -130,6 +137,9 @@ def agent_status(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
                      "`rb token --actor agent`), then ask it to call `agent_brief`. This updates when it does.")
     elif s["state"] == "token_unused":
         hints.append("An agent token was issued but hasn't been used yet. Put it in your AI tool's settings (AI-AGENTS.md).")
+    elif s["state"] == "copy_and_paste":
+        hints.append("You've pasted drafts from a chat assistant with `rb propose`, but no assistant has connected directly. "
+                     "To let one use resume-builder's tools itself, set it up with AI-AGENTS.md (MCP or the HTTP API).")
     if s["stale_token"]:
         hints.append("Your assistant used an API token that's no longer valid (it was replaced). "
                      "Issue a new one with `rb token --actor agent` and update your AI tool.")
@@ -137,6 +147,8 @@ def agent_status(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
         "state": s["state"],
         "last_active": s["last_active"],
         "last_channel": s["last_channel"],
+        "direct_channel": s["direct_channel"],   # mcp or api: how an assistant last connected directly
+        "direct_active": s["direct_active"],
         "channels": {
             "mcp": {"last_seen": s["seen"]["mcp"], "client": space.repo.meta_get("agent.client.mcp")},
             "api": {"last_seen": s["seen"]["api"], "token_issued": s["token_issued"],

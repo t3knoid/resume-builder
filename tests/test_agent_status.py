@@ -91,10 +91,36 @@ def test_mcp_connection_and_tool_calls(sample, owner, client):
     assert "Connected through MCP" in home(client) and "Example Client 2.1" in home(client)
 
 
-def test_copy_and_paste_counts_as_the_cli_channel(sample, owner):
+def test_copy_and_paste_alone_is_not_connected(sample, owner, client, monkeypatch, capsys):
+    """Drafts pasted with rb propose arrive as the agent's work, but no assistant is wired up (#33)."""
     invoke(sample.app, RequestContext.agent(USER, channel="cli"), "job_list", {})
     s = status(sample, owner)
-    assert s["last_channel"] == "cli" and s["channels"]["cli"]["last_seen"]
+    assert s["state"] == "copy_and_paste" and s["last_channel"] == "cli" and s["channels"]["cli"]["last_seen"]
+    assert s["direct_channel"] is None
+    assert any("no assistant has connected directly" in h for h in s["hints"])
+    page = home(client)
+    assert "Used through copy and paste" in page and "Connected through" not in page
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert main(["--user", USER, "status"]) == 0
+    assert '"state": "copy_and_paste"' in capsys.readouterr().out
+
+
+def test_copy_and_paste_after_a_direct_connection_is_still_connected(sample, owner, client):
+    McpServer(sample.app, USER).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                        "params": {"name": "agent_brief", "arguments": {"job_id": JOB}}})
+    sample.repo.meta_set("agent.last_seen.mcp", "2026-11-14T09:00:00+00:00")   # an earlier MCP session
+    invoke(sample.app, RequestContext.agent(USER, channel="cli"), "job_list", {})  # then a pasted draft
+    s = status(sample, owner)
+    assert s["state"] == "connected" and s["last_channel"] == "cli"
+    assert s["direct_channel"] == "mcp" and s["direct_active"] == "2026-11-14T09:00:00+00:00"
+    page = home(client)
+    assert "Connected through MCP, last on 2026-11-14T09:00:00+00:00." in page and "Most recently used through copy and paste" in page
+
+
+def test_copy_and_paste_with_an_unused_token_points_to_the_token(sample, owner):
+    invoke(sample.app, RequestContext.agent(USER, channel="cli"), "job_list", {})
+    invoke(sample.app, owner, "token_issue", {"actor": "agent"})
+    assert status(sample, owner)["state"] == "token_unused"
 
 
 # ---------------------------------------------------------------- a replaced token

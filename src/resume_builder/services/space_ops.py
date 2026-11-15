@@ -52,7 +52,8 @@ def status(space: UserSpace) -> dict:
 def _agent_summary(space: UserSpace) -> dict:
     from .agent_status import summary
     s = summary(space)
-    return {"state": s["state"], "last_active": s["last_active"], "last_channel": s["last_channel"], "stale_token": s["stale_token"]}
+    return {"state": s["state"], "last_active": s["last_active"], "last_channel": s["last_channel"],
+            "direct_channel": s["direct_channel"], "direct_active": s["direct_active"], "stale_token": s["stale_token"]}
 
 
 @operation("space_status", "space:check", Empty, "Sync status, problems, example entries left, limits.")

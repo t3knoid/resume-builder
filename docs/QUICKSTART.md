@@ -70,8 +70,8 @@ No link? `rb new-job --title "Platform Engineer"` (without a link) asks for the 
 
 **With an AI assistant.** Step-by-step setup for Claude, Gemini, ChatGPT and Copilot is in [AI-AGENTS.md](AI-AGENTS.md). Two options:
 
-- *Assistants that support MCP* (Claude Code, Claude Desktop, Gemini CLI, Codex CLI, Copilot in VS Code) connect directly with this command: `docker compose -f /full/path/to/resume-builder/compose.yaml run --rm -T app rb mcp`. Then ask: "Use the resume-builder tools to tailor job `<job-id>`."
-- *Chat in the browser* (claude.ai, Gemini, ChatGPT, Microsoft Copilot): paste the output of `rb brief <job-id>`, then pipe each block it gives back into the app, e.g. `pbpaste | docker compose run --rm -T app rb propose <job-id> profile`.
+- *Assistants that support MCP* (Claude Code, Claude Desktop, Gemini CLI, Codex CLI, Copilot in VS Code) connect directly with this command: `docker compose -f /full/path/to/resume-builder/compose.yaml run --rm -T app rb mcp` (Windows: `docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm -T app rb mcp`). Then ask: "Use the resume-builder tools to tailor job `<job-id>`."
+- *Chat in the browser* (claude.ai, Gemini, ChatGPT, Microsoft Copilot): paste the output of `rb brief <job-id>`, then pipe each block it gives back into the app, e.g. `pbpaste | rb propose <job-id> profile` (macOS) or `Get-Clipboard | rb propose <job-id> profile` (Windows PowerShell).
 
 Either way, the drafts are checked and saved as `profile.yaml` and `fit-report.md` in the job folder for you to review.
 
