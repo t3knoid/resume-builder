@@ -264,10 +264,12 @@ Use the following equivalent in Windows Powershell.
 
 5. Start Claude Code in that folder (`claude`) and check the connection with `/mcp`: resume-builder should be listed as connected, with its tools. The **AI agent** card on the tracker's home page says "Connected through MCP" once it has used a tool.
 
-6. Ask, for example:
+6. Type your request in Claude Code's chat, as you would to a person, with your own job id (`rb list` shows them). For example:
 
    > Use the resume-builder tools to tailor job 2026-11-13-acme-corp-platform. Read the agent brief,
    > write the profile and the fit report, and tell me what the gaps are.
+
+   Claude Code then calls resume-builder's tools itself: it reads the job's brief, saves the profile and the fit report as drafts in the job's folder, and summarizes the gaps for you.
 
    Claude Code asks permission the first time it uses each tool. Allow the resume-builder ones.
 

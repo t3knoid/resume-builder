@@ -220,11 +220,18 @@ def agent_brief(space: UserSpace, ctx: RequestContext, data: BriefIn) -> str:
         lines.append("\n### Skill groups")
         for g in lib.skills:
             lines.append(f"- `{g.id}` {g.name}: {', '.join(g.items)}")
-    other = [e for e in lib.education if e.status == "confirmed"] + [c for c in lib.certifications if c.status == "confirmed"]
-    if other:
+    education = [e for e in lib.education if e.status == "confirmed"]
+    certifications = [c for c in lib.certifications if c.status == "confirmed"]
+    if education or certifications:
         lines.append("\n### Education and certifications")
-        for e in other:
-            lines.append(f"- `{e.id}` {getattr(e, 'institution', None) or getattr(e, 'name', '')}")
+        # Every recorded detail, so the agent never has to ask for (or guess) what the library already holds.
+        for e in education:
+            degree = ", ".join(x for x in (e.degree, e.field) if x)
+            dates = "–".join(x for x in (e.start, e.end) if x)
+            lines.append(f"- `{e.id}` {e.institution}" + (f": {degree}" if degree else "") + (f" ({dates})" if dates else ""))
+        for c in certifications:
+            extra = ", ".join(str(x) for x in (getattr(c, "issuer", None), getattr(c, "date", None)) if x)
+            lines.append(f"- `{c.id}` {c.name}" + (f" ({extra})" if extra else ""))
     drafts = [b.id for b in lib.all_bullets().values() if b.status != "confirmed"]
     if drafts:
         lines.append(f"\n(Not usable until the user confirms them: {', '.join(drafts)})")

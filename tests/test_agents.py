@@ -87,3 +87,16 @@ def test_instructions_cover_every_mode():
         text = agent_instructions(mode)
         assert "Never invent" in text and "[cite:" in text
     assert "rb propose" in agent_instructions("chat")
+
+
+def test_brief_gives_every_education_and_certification_detail(sample, agent):
+    """The agent must not have to ask for a degree the library already holds."""
+    from resume_builder.models import Certification
+
+    lib = sample.repo.load_library()
+    lib.certifications.append(Certification(id="cert-rhcsa", name="RHCSA", issuer="Red Hat", date="2023-05", status="confirmed"))
+    with sample.repo.transaction():
+        sample.repo.replace_library(lib, "owner")
+    brief = invoke(sample.app, agent, "agent_brief", {"job_id": JOB})
+    assert "- `edu-bs` Lakeside State University: B.S., Computer Science (2016)" in brief
+    assert "- `cert-rhcsa` RHCSA (Red Hat, 2023-05)" in brief
