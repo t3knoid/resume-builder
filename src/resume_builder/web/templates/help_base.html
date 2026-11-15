@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block header %}<header class="top">
+  <a class="brand" href="/help">resume-builder help</a>
+  {% for g in guides %}<a href="/help/{{ g.slug }}">{{ g.title }}</a>{% endfor %}
+  <form method="get" action="/help/search" style="margin-left:auto;display:flex;gap:6px">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Search help" aria-label="Search help" size="18">
+    <button>Search</button>
+  </form>
+</header>{% endblock %}
+{% block body %}{% block help %}{% endblock %}
+<p class="muted" style="font-size:12px;margin-top:24px">Help for resume-builder v{{ version }}: the guides that came with this version. Links marked ↗ open on GitHub.</p>
+{% endblock %}

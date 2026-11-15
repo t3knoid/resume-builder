@@ -1,0 +1,13 @@
+{% extends "help_base.html" %}
+{% block title %}Search help{% endblock %}
+{% block help %}
+<h1>Search help</h1>
+{% if not q.strip() %}<p class="muted">Type a word or two, for example <em>sign in</em> or <em>paid plan</em>.</p>
+{% elif not hits %}<p>Nothing found for <strong>{{ q }}</strong>. Try fewer or different words.</p>
+{% else %}
+<p class="muted">{{ hits | length }} section{{ "" if hits | length == 1 else "s" }} for <strong>{{ q }}</strong>:</p>
+<div class="card"><ul>
+{% for h in hits %}<li><a href="/help/{{ h.guide.slug }}#{{ h.anchor }}">{{ h.heading }}</a> <span class="muted">({{ h.guide.title }})</span>{% if h.snippet %}<br><span class="muted" style="font-size:13px">{{ h.snippet }}</span>{% endif %}</li>
+{% endfor %}</ul></div>
+{% endif %}
+{% endblock %}

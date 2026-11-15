@@ -25,6 +25,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+# The user guides, packaged as the in-app help (issue #34): only these three, never the contributor docs.
+COPY docs/QUICKSTART.md docs/USER-MANUAL.md docs/AI-AGENTS.md ./src/resume_builder/help/
 RUN pip install ".[pdf,test]"
 COPY examples ./examples
 COPY tests ./tests

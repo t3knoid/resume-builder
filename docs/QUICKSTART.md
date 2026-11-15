@@ -32,7 +32,7 @@ Open `.env` and set:
 
 Run the setup script again: `sh setup.sh`, or `setup.bat` on Windows. It builds and starts the app (`docker compose up -d --build`) and installs the `rb` command, so you can type `rb` from any folder instead of a Docker command.
 
-Open <http://localhost:8000>. The app has created your folder at `data/<your-name>/`.
+Open <http://localhost:8000>. The app has created your folder at `data/<your-name>/`. This guide, the user manual and the AI agent guide are also under **Help** at the top of every page.
 
 Check that `rb` works: `rb --help`. If `rb` isn't found yet, open a new terminal; the setup script also prints how to make it work in a window that was already open.
 

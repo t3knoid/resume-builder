@@ -278,7 +278,8 @@ def test_pages_cannot_be_framed_and_run_no_scripts(client):
     r = client.get(f"/u/{USER}/proposals")
     assert r.headers["x-frame-options"] == "DENY"
     csp = r.headers["content-security-policy"]
-    assert "frame-ancestors 'none'" in csp and "script-src" not in csp and "default-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp and "default-src 'none'" in csp
+    assert "script-src 'self';" in csp and "unsafe-inline" not in csp.split("script-src", 1)[1].split(";", 1)[0]  # only the site's own script files (#34)
     assert "content-security-policy" not in client.get("/docs").headers      # the API docs page needs its scripts
 
 

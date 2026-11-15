@@ -1,0 +1,8 @@
+{% extends "help_base.html" %}
+{% block title %}{{ doc.guide.title }} · Help{% endblock %}
+{% block help %}
+<details class="card help-toc" open><summary><strong>Contents</strong></summary>
+<ul>{% for level, text, anchor in doc.toc if level in (2, 3) %}<li style="margin-left:{{ (level - 2) * 16 }}px"><a href="#{{ anchor }}">{{ text }}</a></li>{% endfor %}</ul>
+</details>
+<article class="card help-doc">{{ doc.html | safe }}</article>
+{% endblock %}

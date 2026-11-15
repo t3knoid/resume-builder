@@ -3,7 +3,7 @@
 {% block body %}
 <h1>{{ user }}</h1>
 <div class="card">
-  <h2>Sync status</h2>
+  <h2>Sync status <a class="help-link" href="/help/user-manual#when-somethings-wrong" target="rb-help" data-help title="Help: when something's wrong">?</a></h2>
   <p>Last sync: {{ status.last_sync or "never" }}</p>
   {% if status.files_needing_attention %}
     <p class="bad">These files need attention. The app keeps using their last good version until they're fixed (details in SYNC-STATUS.md):</p>
@@ -16,7 +16,7 @@
   <p class="muted">Saved documents: {{ status.snapshots.count }} of {{ status.snapshots.limit }}{% if status.snapshots.near_limit %} <span class="stale">(near the limit)</span>{% endif %}</p>
 </div>
 <div class="card">
-  <h2>AI agent</h2>
+  <h2>AI agent <a class="help-link" href="/help/ai-agents#step-4-verify-your-assistant" target="rb-help" data-help title="Help: verify your assistant">?</a></h2>
   {% if agent.state == "connected" %}
     <p class="ok">Connected through {{ {"mcp": "MCP", "api": "the HTTP API"}.get(agent.direct_channel, agent.direct_channel) }}, last on {{ agent.direct_active }}.{% if agent.last_channel == "cli" %} Most recently used through copy and paste ({{ agent.last_active }}).{% endif %}</p>
   {% elif agent.state == "copy_and_paste" %}

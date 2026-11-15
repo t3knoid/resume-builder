@@ -32,16 +32,23 @@ select, input, button { font:inherit; padding:4px 6px; border:1px solid var(--li
 pre { white-space:pre-wrap; background:var(--bg); padding:10px; border-radius:6px; border:1px solid var(--line); max-height:420px; overflow:auto; }
 .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
 .stat { font-size:26px; font-weight:700; }
+a.help-link { font-size:12px; font-weight:400; margin-left:6px; text-decoration:none; border:1px solid var(--line); border-radius:9px; padding:0 6px; }
+a.external::after { content:" 97"; font-size:11px; }
+.help-doc { max-width:860px; } .help-doc h1, .help-doc h2, .help-doc h3 { scroll-margin-top:12px; } .help-doc pre code { font-size:13px; }
+.help-doc code { background:var(--bg); padding:0 3px; border-radius:3px; } .help-doc pre code { background:none; padding:0; }
+.help-toc { font-size:14px; } .help-toc ul { padding-left:18px; margin:4px 0; } .help-toc li { margin:2px 0; }
+.code-label { font-size:11px; color:var(--muted); margin-bottom:-6px; }
 </style>
 </head>
 <body>
-<header class="top">
+{% block header %}<header class="top">
   <a class="brand" href="/">resume-builder</a>
   {% if user %}<a href="/u/{{ user }}/">Home</a><a href="/u/{{ user }}/applications">Applications</a><a href="/u/{{ user }}/dashboard">Dashboard</a><a href="/u/{{ user }}/proposals">Proposed jobs</a>{% endif %}
   <span class="muted" style="margin-left:auto;font-size:12px">v{{ version }} ·
   {% if user and signed_in %}signed in <form method="post" action="/u/{{ user }}/logout" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button style="font-size:12px;padding:1px 6px">Sign out</button></form>
-  {% elif user %}read-only · <a href="/u/{{ user }}/login">Sign in</a>{% else %}read-only{% endif %} · <a href="/docs">API</a></span>
-</header>
+  {% elif user %}read-only · <a href="/u/{{ user }}/login">Sign in</a>{% else %}read-only{% endif %} · <a href="/help" target="rb-help" data-help>Help</a> · <a href="/docs">API</a></span>
+</header>{% endblock %}
 <main>{% block body %}{% endblock %}</main>
+<script src="/static/help.js" defer></script>
 </body>
 </html>

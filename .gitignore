@@ -16,6 +16,9 @@ __pycache__/
 build/
 dist/
 
+# The in-app help is copied from docs/ when the image is built (issue #34); docs/ is the only source
+src/resume_builder/help/
+
 # Written into the example folder whenever it's synced
 examples/**/SYNC-STATUS.md
 examples/**/.schemas/

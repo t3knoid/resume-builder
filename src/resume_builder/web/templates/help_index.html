@@ -1,0 +1,16 @@
+{% extends "help_base.html" %}
+{% block title %}Help · resume-builder{% endblock %}
+{% block help %}
+<h1>Help</h1>
+{% if available %}
+<div class="card">
+  <ul>
+    <li><a href="/help/quickstart">Quick start</a>: from installing to your first tailored resume.</li>
+    <li><a href="/help/user-manual">User manual</a>: everything resume-builder does, step by step.</li>
+    <li><a href="/help/ai-agents">Working with an AI agent</a>: connecting Claude, Gemini, ChatGPT or Copilot, and answering its questions.</li>
+  </ul>
+</div>
+{% else %}
+<div class="card"><p class="bad">The guides aren't included in this installation. They're in the project's <code>docs/</code> folder on <a href="https://github.com/t3knoid/resume-builder/tree/main/docs" target="_blank" rel="noopener noreferrer" class="external">GitHub</a>.</p></div>
+{% endif %}
+{% endblock %}

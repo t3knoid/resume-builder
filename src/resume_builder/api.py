@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
@@ -163,7 +164,7 @@ def _website(api: FastAPI, app: App) -> None:
     async def _security_headers(request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path == "/" or path.startswith("/u/"):
+        if path == "/" or path.startswith(("/u/", "/help", "/static/")):
             for k, v in websession.SECURITY_HEADERS.items():
                 if k == "Content-Security-Policy" and "/snapshots/" in path:
                     continue  # rendered documents carry their own styles and fonts
@@ -180,6 +181,29 @@ def _website(api: FastAPI, app: App) -> None:
     def home(request: Request):
         users, problems = app.discover_users()
         return page(request, "index.html", users=users, folder_problems=problems)
+
+    # ------------------------------------------------------------ online help (issue #34, PRD R8.11)
+    # The app's own user guides, not user data: public like the rest of the site, behind the same
+    # Host check and security headers. Help links open them in one pop-up window (static/help.js).
+
+    from . import help as helpdocs
+
+    api.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+
+    @api.get("/help", response_class=HTMLResponse, include_in_schema=False)
+    def help_home(request: Request):
+        return page(request, "help_index.html", guides=helpdocs.GUIDES, available=helpdocs.guides_dir() is not None)
+
+    @api.get("/help/search", response_class=HTMLResponse, include_in_schema=False)
+    def help_search(request: Request, q: str = ""):
+        return page(request, "help_search.html", guides=helpdocs.GUIDES, q=q, hits=helpdocs.search(q[:200]))
+
+    @api.get("/help/{slug}", response_class=HTMLResponse, include_in_schema=False)
+    def help_page(request: Request, slug: str):
+        rendered = helpdocs.render_guide(slug)
+        if rendered is None:
+            raise HTTPException(404, "No such help page.")
+        return page(request, "help_page.html", guides=helpdocs.GUIDES, doc=rendered)
 
     @api.get("/u/{user}/", response_class=HTMLResponse, include_in_schema=False)
     def user_home(request: Request, user: str):

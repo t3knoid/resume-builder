@@ -16,6 +16,7 @@ dependencies = [
   "pydantic==2.11.4",
   "ruamel.yaml==0.18.10",
   "python-multipart==0.0.20",
+  "markdown-it-py==3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,7 @@ rb = "resume_builder.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-resume_builder = ["web/templates/*.html", "web/static/*", "templates/**/*", "migrations/*.sql"]
+resume_builder = ["web/templates/*.html", "web/static/*", "templates/**/*", "migrations/*.sql", "help/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

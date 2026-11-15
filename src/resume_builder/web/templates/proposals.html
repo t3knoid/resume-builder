@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Proposed jobs · {{ user }}{% endblock %}
 {% block body %}
-<h1>Jobs proposed by your AI agent</h1>
+<h1>Jobs proposed by your AI agent <a class="help-link" href="/help/user-manual#starting" target="rb-help" data-help title="Help: starting a job">?</a></h1>
 {% if notice %}<p class="ok">{{ notice }}</p>{% endif %}
 {% if signed_in %}<p class="muted">Nothing is created until you confirm. Check the company and any value, then confirm or discard.</p>
 {% else %}<p class="muted">Nothing is created until you confirm. The site is read-only until you <a href="/u/{{ user }}/login">sign in</a>; or run the command shown. <code>rb confirm-job</code> shows the same preview and asks about the company, duplicates and any value you want to change.</p>{% endif %}
