@@ -733,6 +733,32 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 
 An MCP or API agent can also **propose a new job**: give it the posting's link and it calls `job_intake_propose`. The app fetches the posting itself and rejects any value the posting doesn't state. Nothing is created until you review it: `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`), and `rb confirm-job <n>` shows the same preview and questions as `rb new-job <url>` (it takes the same options, such as `--company` and `--yes`). `rb discard-job <n>` drops one. Everything the agent does is in the audit log (`rb audit`), marked as the agent.
 
+### Answering the agent's questions
+
+The agent asks when your library doesn't say something it needs: a missing metric, whether a requirement is a real gap, why you want the job. It never guesses, so its questions are the way to fill those holes. They also stay in the job's `fit-report.md` under "Questions for the user", so you can answer later.
+
+**Answer in the chat, in one message, numbered like its questions.** Answer only what you know; "skip" or "not sure" is fine.
+
+```text
+1. Bachelor of Science in Computer Engineering.
+2. Real gap: I haven't used Kubernetes in production.
+3. Missing information: the pipeline work cut build time from 40 to 12 minutes.
+4. Skip for now.
+```
+
+- For a gap, say which it is: a **real gap** (you don't have it; it stays a gap) or **missing information** (you do; give the facts).
+- Give exact numbers, or say there isn't one. The agent never estimates a metric.
+
+**Where each answer ends up:**
+
+| Your answer | What happens |
+| --- | --- |
+| New experience or a fact missing from your library (a tool, a project, an outcome) | The agent saves it as a **draft** bullet in `base.yaml`. It's used only after you confirm it: `rb confirm <id>`, or `status: confirmed` in `base.yaml`. |
+| A metric or detail for a bullet that's already confirmed | Add it to that bullet in `base.yaml` yourself; the agent can't change confirmed content. |
+| Why you want the job | Write it in `interest_notes` in the job's `application.yaml`, in your own words; rough notes are fine. The agent turns them into the "Why do you want to work here?" answer and the cover letter, but never writes the reasons for you (without notes it writes `[MOTIVATION NEEDED]`). |
+
+Then ask it to redo the work, for example: "Update the profile and fit report for `<job-id>` with my answers." It reads the brief again, picks up what you confirmed, and rewrites the drafts.
+
 ## 16. Command reference
 
 | Command                                                                              | What it does                                        |

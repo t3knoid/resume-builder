@@ -4,6 +4,7 @@ Notable changes to resume-builder, newest first. Requirement and decision ids (s
 
 ## Unreleased
 
+- AI-AGENTS.md and the user manual: a short "Answering the agent's questions" section: answer in the chat, numbered; real gap or missing information; where each answer ends up (draft bullet to confirm, a metric you add to `base.yaml`, your reasons in `interest_notes`); then ask the agent to redo the drafts.
 - Fix: the agent brief now gives each confirmed education entry's degree, field and dates, and each certification's issuer and date. It listed only the school or certificate name, so assistants asked for a degree the library already held.
 - AI-AGENTS.md: step 3 (connect your assistant) starts with a table of every assistant, how it connects and a link to its setup section. The MCP command and what its parts mean moved to step 4, where you test it.
 - AI-AGENTS.md and the quick start show every command for both macOS/Linux and Windows PowerShell: working folders, the MCP command and testing it, saving instruction files (as UTF-8), clipboard copy and paste, the HTTP API example (`Invoke-RestMethod`), and Windows versions of the Claude Desktop, Gemini CLI, Codex and VS Code settings. Commands that are the same everywhere say so.
