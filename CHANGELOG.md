@@ -6,6 +6,7 @@ Notable changes to resume-builder, newest first. Requirement and decision ids (s
 
 - One-step setup: `setup.sh` (macOS, Linux) and `setup.bat` / `setup.ps1` (Windows) create `.env` on the first run, then build and start the app and install the `rb` command.
 - `rb` without Docker commands: `scripts/install-rb.sh` (macOS, Linux) and `scripts/install-rb.cmd` (Windows) install an `rb` command that runs `rb` in the container from any folder. On Windows it is added to the user PATH without changing anything else in it, and `-Uninstall` restores the PATH exactly.
+- PRD: added section 8.13, job intake from a posting URL (default) or pasted text, with decisions D24–D29 (approved November 15, 2026) and the `application:propose` permission for the agent (B2, B7). Not yet implemented.
 - Piped input no longer needs a separate `rbi` alias: `rb propose` accepts piped text directly, and ignores the byte-order mark Windows PowerShell 5.1 adds to piped text.
 
 ## 0.2.0 (November 14, 2026)

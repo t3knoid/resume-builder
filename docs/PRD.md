@@ -58,6 +58,7 @@ The first real user is onboarded through the same path as any other user (`init-
 - **YAML sync** (section 8.7): validated, change-aware sync of the user's YAML and Markdown input into SQLite, write-back of app changes to the files, conflict detection, automatic database backups.
 - Content library with ids, tags, metrics, evidence and limits.
 - For each job: posting, AI-generated profile, fit report, application record.
+- Job intake (section 8.13): start a job from its posting URL, or from pasted text as a fallback, with fields extracted and the posting captured, confirmed once by the user.
 - Validator, renderer, ATS-friendly HTML and PDF output (WeasyPrint).
 - Cover letter and "Why do you want to work here?" drafts built from the tailored resume (section 8.9).
 - Read-only local tracker website: application list, history for each application, basic dashboard, sync status.
@@ -424,6 +425,124 @@ Every document the app produces can be rebuilt later exactly as it was, even aft
 | R12.14 | PDFs and HTML are rendered on demand from snapshots. `/output` is a disposable export folder: the app never reads from it, never relies on it, and offers a `clean-output` command. Deleting it loses nothing. |
 | R12.15 | Documents shown in the tracker website are rendered on the fly from snapshots and streamed to the browser, without writing files. |
 
+### 8.13 Job intake (from a URL or pasted text)
+
+#### Problem
+
+Starting a job today means running `new-job`, then copying the posting into `posting.md` and typing a dozen fields into `application.yaml` (title, location, salary, date posted, requisition id, and so on). That transcription is tedious, error-prone, and the step where users give up. The AI agent can't help, because it may not create jobs or edit the user's files. Intake turns one input, a link or a block of text, into a fully populated job that the user reviews once.
+
+#### Goals
+
+- One input starts a job: the posting URL by default, or pasted text when the URL can't be fetched.
+- The posting is kept exactly as published, because postings disappear once a job closes and the fit report and letters depend on it.
+- Every field the posting states is filled in. Nothing the posting doesn't state is guessed.
+- The user reviews and confirms once, before anything is created.
+- The same operation works for the CLI, the website, the HTTP API and the agent, with the agent limited to proposing.
+
+#### Non-goals
+
+- Crawling, searching or monitoring job sites. Intake fetches only the one URL the user gives it, when the user asks.
+- Logging in to job sites or using the user's browser session or cookies.
+- Running JavaScript in a headless browser (see D26).
+- Rewording, summarizing or "cleaning up" the posting text.
+- Filling in `interest_notes`, `interest_level` or anything else that is the user's own judgment.
+
+#### User flow
+
+```text
+rb intake <url>                       # default: fetch the page
+rb intake --file intake/<name>.txt    # fallback: text the user saved in their intake folder
+rb intake --stdin < posting.txt       # fallback: piped text
+        │
+        ▼
+capture  →  extract fields  →  match company/department  →  check for duplicates  →  preview
+        │
+        ▼
+user confirms (or edits a field, or picks another company)  →  job created, posting.md and application.yaml written
+```
+
+#### Input sources
+
+| Id | Requirement |
+| --- | --- |
+| R13.1 | **URL is the default input.** `intake <url>` fetches the page and uses it as the posting. The URL is stored as `posting_url`. |
+| R13.2 | **Pasted text is the fallback**, for pages that need a login (for example LinkedIn), render only with JavaScript, block automated requests, or for postings received by email. The user saves the text to a file in their intake folder (`/data/<user>/intake/`) or pipes it on stdin. A URL found in the text is used as `posting_url`; otherwise the user may pass `--url`. |
+| R13.3 | When a fetch fails or returns too little posting text (for example an empty JavaScript shell or a login page), intake stops, says why in plain words, and shows the exact paste-fallback command. It never creates a job from a page it couldn't read. |
+| R13.4 | The intake folder is seeded by bootstrap with a short `README.md` explaining its use. Files in it are read only by the sync adapter (A1), only when the user runs intake on them, and never deleted or moved by the app. After a successful intake, `SYNC-STATUS.md` notes that the file has been taken in and can be deleted. |
+
+#### Fetching
+
+| Id | Requirement |
+| --- | --- |
+| R13.5 | A fetch is one HTTP(S) GET of the given URL, started only by an explicit intake request. No crawling, no follow-up requests for other pages, no retries in a loop. |
+| R13.6 | Fetches send no cookies, credentials or user data, and use a generic user agent that names the app but not the user. |
+| R13.7 | **Safe fetching:** only `http` and `https`; the resolved address of the host and of every redirect is checked, and loopback, private, link-local and other internal addresses are refused; at most 5 redirects; a timeout (default 20 s) and a size limit (default 2 MB); only HTML or plain-text responses are accepted. |
+| R13.8 | Fetched content is untrusted data. It is never executed or rendered as HTML in the website, and text passed to the agent is marked as posting content, not instructions. |
+| R13.9 | Fetching can be turned off per user (`intake.fetch: false` in `user.yaml`), in which case intake accepts pasted text only. Timeout and size limit are also set there, with seeded defaults. |
+
+#### Capturing the posting
+
+| Id | Requirement |
+| --- | --- |
+| R13.10 | The **captured posting** is stored in the database with the source (URL or file), the time it was captured, and a content hash. It is never edited afterwards. Re-capturing the same job's posting adds a new capture; the latest one is current. |
+| R13.11 | `posting.md` is written from the capture: the page's main content converted mechanically to Markdown (headings, lists, paragraphs), with navigation, footers, scripts and cookie banners removed. The wording is never changed. A "Source" section records the URL and capture date, and the existing "My notes" section is kept for the user. |
+| R13.12 | Once written, `posting.md` follows the normal sync rules (section 8.7): the user's edits sync back, and intake never overwrites a `posting.md` the user has changed. |
+
+#### Extracting fields
+
+| Id | Requirement |
+| --- | --- |
+| R13.13 | Intake fills the posting fields of section 8.6: company and department (as names, matched in R13.17), title, posting URL, source, external posting id, location, work arrangement, salary range as posted, date posted and closing date. |
+| R13.14 | **Structured data first.** When the page carries schema.org `JobPosting` data (common on employer and job-board sites), fields are taken from it: `title`, `hiringOrganization`, `jobLocation`, `jobLocationType`, `baseSalary`, `datePosted`, `validThrough`, `identifier`. Otherwise, rules in code recognize common patterns: salary ranges, "Posted on …" dates, "Job ID / Req #" labels, and the source from the URL's domain (`linkedin` for LinkedIn, `job_board` for known boards, otherwise `company_site`). |
+| R13.15 | **Never guess.** A field the posting does not state stays `null`; `work_arrangement` stays `unknown` unless the posting says remote, hybrid or onsite. Every extracted value records the passage of the capture it came from, and the service rejects any value whose passage is not in the capture. This check is in code (section 6.2), so it applies to any agent. |
+| R13.16 | **Site adapters** for sites with a known page or API format (for example applicant tracking systems that many employers share) are an extension point (A4, [ARCHITECTURE.md](ARCHITECTURE.md)): a plugin can register an adapter for a domain that returns the capture and fields. Core ships the generic HTML and structured-data path; adapters must follow R13.5–R13.8. |
+
+#### Company, department and duplicates
+
+| Id | Requirement |
+| --- | --- |
+| R13.17 | The company and department names found in the posting are matched against the registry (names and aliases, R11.3–R11.4). The preview offers the best existing match first. A new entry is created only when the user chooses it at confirmation (R11.5). |
+| R13.18 | Before creating a job, intake checks for an existing application with the same posting URL or the same company and external id. If one exists, the preview says so and offers to re-capture the posting for that job instead of creating a new one. |
+
+#### Review and confirmation
+
+| Id | Requirement |
+| --- | --- |
+| R13.19 | Intake shows a **preview** before creating anything: each field with its value and source passage, the matched company and department, the job id it would create (R1.3), and any duplicate. On the CLI the user confirms, edits a field, or picks another registry entry; `--yes` accepts the preview as shown. |
+| R13.20 | On confirmation, intake creates the application exactly as `new-job` does (R10.9: stage `interested`, today's date), with the extracted fields filled in, then writes `posting.md` and `application.yaml` through write-back. The whole intake is applied in one transaction: all or nothing. |
+| R13.21 | After intake, the CLI prints the next steps: add `interest_notes`, then ask the agent for a profile and fit report (or run `brief`). |
+
+#### The AI agent
+
+| Id | Requirement |
+| --- | --- |
+| R13.22 | The agent may **propose** an intake (`job_intake_propose`, permission `application:propose`): a URL or text, plus optional field values with their source passages. The proposal is a draft that does not create a job, a registry entry or any file. It is subject to the same checks as R13.15 and R13.18. |
+| R13.23 | The owner sees pending intake proposals in the CLI, the website and `SYNC-STATUS.md`, and confirms or discards each one. Confirmation follows R13.19–R13.20. |
+| R13.24 | The agent may trigger a fetch by proposing an intake with a URL (D27). The fetch follows R13.5–R13.8, and nothing is created until the owner confirms. |
+
+#### Operations and interfaces
+
+| Id | Requirement |
+| --- | --- |
+| R13.25 | Intake is defined once as service operations (A5) and appears in the CLI, HTTP API and MCP together: `job_intake_preview` (owner, read-only: capture and extract, create nothing), `job_intake` (owner, `application:write`), `job_intake_propose` (agent, `application:propose`), `job_intake_confirm` and `job_intake_discard` (owner, `application:write`). Each declares its permission and has permission tests (B9). |
+| R13.26 | `new-job` keeps working unchanged for users who prefer to type the fields. |
+| R13.27 | Each fetch is recorded in the audit log with the URL's host (not the full URL or the content), the result and the actor. |
+
+#### Privacy
+
+| Id | Requirement |
+| --- | --- |
+| R13.28 | Captured postings are private data, like `posting.md` (section 10). They stay in the user's database and backups and never appear in logs, commit messages or file names. The intake folder is inside the user's data folder and is gitignored with it. |
+| R13.29 | The only outbound traffic intake adds is the single GET of R13.5 to the URL the user supplied. The tests and the example user never make real network requests; fetching is tested against a local stub. |
+
+#### Acceptance
+
+- `intake <url>` on a page with schema.org `JobPosting` data produces a preview with every stated field filled and nothing invented; confirming creates the job, `posting.md` and `application.yaml` in one step.
+- `intake --file` on text pasted from a login-only site produces the same result, minus anything the text doesn't state.
+- A JavaScript-only page, a login page, a private address, an oversize response and a redirect loop each stop with a clear message and create nothing.
+- An agent proposal with a value not found in the capture is rejected; a valid one waits for the owner and creates nothing until confirmed.
+- Running intake twice on the same URL offers a re-capture instead of a duplicate job.
+
 ## 9. Application architecture
 
 ### 9.1 Layers: one API in front of all data
@@ -460,12 +579,12 @@ The app does not build user accounts. It does build the structure that role-base
 | Id | Requirement |
 | --- | --- |
 | B1 | Every service call takes a **request context**: actor id, the actor's roles, the user space it acts in and a request id. No service method works without one. |
-| B2 | Every operation declares the permission it needs, for example `content:read`, `content:propose`, `content:confirm`, `profile:write`, `resume:render`, `letter:propose`, `letter:approve`, `snapshot:read`, `snapshot:regenerate`, `snapshot:pin`, `snapshot:delete`, `organization:read`, `organization:write`, `organization:merge`, `application:read`, `application:write`, `event:append`, `site:publish`, `space:init`, `space:check`, `space:sync`, `data:backup`, `data:restore`. The declaration is part of the operation's definition, so the generated API documents it as well. |
+| B2 | Every operation declares the permission it needs, for example `content:read`, `content:propose`, `content:confirm`, `profile:write`, `resume:render`, `letter:propose`, `letter:approve`, `snapshot:read`, `snapshot:regenerate`, `snapshot:pin`, `snapshot:delete`, `organization:read`, `organization:write`, `organization:merge`, `application:read`, `application:propose`, `application:write`, `event:append`, `site:publish`, `space:init`, `space:check`, `space:sync`, `data:backup`, `data:restore`. The declaration is part of the operation's definition, so the generated API documents it as well. |
 | B3 | Authorization is checked in one place: the service layer calls a policy interface before every operation. The app ships one policy: the local **owner** has every permission in their own user space and none outside it. Two non-human actors also exist: `agent` (B7) and `system` (the bootstrap script, limited to `space:init`, `space:check` and `space:sync`). |
 | B4 | Interfaces never make permission decisions; they only supply identity. No code path skips the check, including internal calls between services. |
 | B5 | Every stored record belongs to a user space and carries `created_by`, `created_at`, `updated_by` and `updated_at`. Every event records its actor. Changes from YAML sync are recorded as the owner's, with the channel noted. |
 | B6 | Every write creates an audit entry (actor, channel, operation, target, time, result) in the audit log table. |
-| B7 | **The AI agent is its own actor** with the `agent` role. It can read content and postings, propose draft bullets, write profiles and fit reports, draft cover letters and answers, and draft events. It can read the organization registry and suggest entries (R11.8), but cannot add, rename or merge them. It can read and regenerate snapshots, but cannot pin or delete them. It cannot confirm content, approve letters or answers, confirm events, publish, sync, back up or restore. This makes the honesty rule ("AI advises, the user decides") something the code enforces, not just a convention. |
+| B7 | **The AI agent is its own actor** with the `agent` role. It can read content and postings, propose draft bullets, write profiles and fit reports, draft cover letters and answers, and draft events and job intakes (R13.22). It can read the organization registry and suggest entries (R11.8), but cannot add, rename or merge them. It can read and regenerate snapshots, but cannot pin or delete them. It cannot confirm content, approve letters or answers, confirm events, publish, sync, back up or restore. This makes the honesty rule ("AI advises, the user decides") something the code enforces, not just a convention. |
 | B8 | Roles and their permissions are configuration, not code. Besides `owner`, `agent`, `system` and `viewer` (read only), a host can add roles such as `reviewer` (for example a career coach who can read and comment but not confirm) or `admin`. The request context also carries a tenant id, and the policy refuses any access across tenants. |
 | B9a | **Who is calling:** every HTTP API call carries a local bearer token that identifies the actor. `rb token --actor agent` (or `--actor owner`) issues a token, stores only its hash, and replaces the previous one; the user gives the agent token to their AI tool. Requests without a valid token are read-only and limited to the website's pages. The CLI acts as the owner unless `RB_ACTOR_TOKEN` names another actor. These checks prevent mistakes and keep the agent within its role; they are not protection against someone who already controls the user's machine or Docker. |
 | B9 | Tests check that every operation declares a permission, a deny-all policy blocks every operation, and a read-only policy blocks every write. |
@@ -480,6 +599,7 @@ The interfaces that implement A1–A5 and B1–B8 (app factory, storage, request
 - Contact data about third parties (recruiters, interviewers) is personal data. It is kept only locally, and the user can delete it.
 - The tracker website and HTTP API are reachable only from the user's own machine. Inside the container the server listens on all interfaces, as containers require, but `compose.yaml` publishes the port only on the host's `127.0.0.1`.
 - Snapshots never contain contact details or secrets (R12.3).
+- Job intake (section 8.13) is the only feature that makes outbound requests: one GET of a URL the user supplies, with no cookies or user data, and internal addresses refused (R13.5–R13.8).
 - YAML input is read with a safe loader and strict limits (R7.7), so a malformed or hostile file can't run code or exhaust memory.
 - User data, databases, backups, rendered output and secrets never go into the Docker image. `.dockerignore` excludes them, and a CI check fails the image build if any of them appear in the build context.
 - Every write is recorded in the audit log (section 9.2), so it is always clear who or what changed a record: the user (through YAML or a command) or the AI agent.
@@ -537,7 +657,7 @@ The application ships and runs as a Docker image. The image contains only code, 
 
 ## 12. Decisions
 
-All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026.
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D29 (job intake, section 8.13) were decided on November 15, 2026.
 
 | #   | Decision                                                                     | Choice                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -564,6 +684,12 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 | D21 | When sync runs (R7.5)                                                        | At startup, on file change (watcher with polling fallback), before CLI commands, and on demand                                                                                         |
 | D22 | Backup retention (DK6)                                                       | Before every data-changing sync or migration, plus daily; keep the last 30 of each kind (DK6)                                                                                          |
 | D23 | License | AGPL-3.0-or-later (decided November 14, 2026). Contributions need a DCO sign-off and are also licensed under MIT, so the project can later move to MIT or Apache-2.0 (`CONTRIBUTING.md`) |
+| D24 | Job intake (section 8.13): approve the feature as written? | Approved as written (November 15, 2026) |
+| D25 | Paste fallback location (R13.2, R13.4) | Use an `intake/` folder in the user's data folder plus stdin; intake runs only on command, never automatically when a file appears |
+| D26 | JavaScript-rendered pages (R13.3) | No headless browser in the image (size, attack surface); use the paste fallback or a site adapter (R13.16) |
+| D27 | May the agent trigger a fetch (R13.24)? |  Yes, through `job_intake_propose` with a URL, since the fetch is one GET under R13.5–R13.8 and creates nothing until the owner confirms |
+| D28 | New permission `application:propose` for the agent (R13.22) | Add it to B2 and the agent role in B7 |
+| D29 | Keep every capture of a posting, or only the latest (R13.10)? | Keep all; they are small text and show when a posting changed |
 
 ## 13. Milestones
 
@@ -574,3 +700,4 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 5. Application service and the read-only tracker website, including sync status.
 6. Optional publishing of the exported public site to the target set in `user.yaml`.
 7. First real user onboarded with `init-user` and running a live application from start to finish. Anything they need that's missing becomes a generic feature (R1.6).
+8. Job intake (section 8.13, D24–D29): capture from a URL and from pasted text, structured-data and rule-based extraction with passage checks, registry matching, duplicate check, preview and confirm, agent proposals, and fetch-safety tests against a local stub.
