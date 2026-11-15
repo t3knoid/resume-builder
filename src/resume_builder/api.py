@@ -38,6 +38,10 @@ def context_for(app: App, user: str, authorization: str | None) -> RequestContex
         token = authorization.removeprefix("Bearer ").strip()
         actor = actor_for_token(space, token)
         if actor is None:
+            from .services.agent_status import note_replaced_token
+            from .services.space_ops import hash_token
+            if space.repo.replaced_token_actor(hash_token(token)) == "agent":
+                note_replaced_token(space)  # shown on the agent status: "your assistant's token was replaced"
             raise PermissionDenied("That token isn't valid (it may have been replaced). Issue a new one with `rb token`.")
         return RequestContext(actor=actor, roles=(actor,), user_id=user, channel="api", tenant_id=app.tenant_id)
     return RequestContext.anonymous(user, tenant_id=app.tenant_id)
@@ -179,7 +183,8 @@ def _website(api: FastAPI, app: App) -> None:
 
     @api.get("/u/{user}/", response_class=HTMLResponse, include_in_schema=False)
     def user_home(request: Request, user: str):
-        return page(request, "user.html", user=user, status=run(user, "space_status"), actions=run(user, "actions"))
+        return page(request, "user.html", user=user, status=run(user, "space_status"), actions=run(user, "actions"),
+                    agent=run(user, "agent_status"))
 
     @api.get("/u/{user}/applications", response_class=HTMLResponse, include_in_schema=False)
     def applications(request: Request, user: str, stage: str | None = None, company: str | None = None,

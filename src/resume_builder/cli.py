@@ -708,6 +708,15 @@ def print_bootstrap(report: dict) -> None:
             print(f"  Contact details not set: {', '.join(st['missing_contact_secrets'])} (add them to .env)")
         if st["snapshots"]["near_limit"]:
             print(f"  Saved documents near the limit: {st['snapshots']['count']} of {st['snapshots']['limit']}")
+        agent = st.get("agent") or {}
+        if agent.get("state") == "connected":
+            print(f"  AI agent: connected ({agent['last_channel']}), last active {agent['last_active']}")
+        elif agent.get("state") == "token_unused":
+            print("  AI agent: token issued, not used yet (see docs/AI-AGENTS.md)")
+        else:
+            print("  AI agent: not set up yet (see docs/AI-AGENTS.md)")
+        if agent.get("stale_token"):
+            print("  Your assistant used a replaced API token: issue a new one with rb token --actor agent")
         if st.get("job_proposals_waiting"):
             print(f"  {st['job_proposals_waiting']} proposed job(s) waiting: rb job-drafts")
         if st["event_drafts_waiting"]:

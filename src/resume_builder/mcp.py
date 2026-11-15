@@ -81,6 +81,7 @@ class McpServer:
             return None
         try:
             if method == "initialize":
+                self._connected(msg.get("params") or {})
                 requested = (msg.get("params") or {}).get("protocolVersion")
                 version = requested if requested in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0]
                 result = {
@@ -101,6 +102,20 @@ class McpServer:
         except Exception as exc:  # never crash the session
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": str(exc)}}
         return {"jsonrpc": "2.0", "id": mid, "result": result}
+
+    def _connected(self, params: dict) -> None:
+        """An MCP client connected: recorded for the agent status (issue #32). Never fails the handshake."""
+        from .services.agent_status import clean_client, note_connect
+
+        info = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
+        try:
+            space = self.app.space(self.user)
+            ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel="mcp",
+                                 tenant_id=self.app.tenant_id)
+            with space._lock:
+                note_connect(space, ctx, clean_client(info.get("name"), info.get("version")))
+        except Exception:
+            pass
 
     def call(self, name: str, arguments: dict) -> dict:
         if name not in self.tools:

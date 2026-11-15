@@ -50,6 +50,8 @@ Everything the agent does is in the audit log (`rb audit`), marked `agent`, with
 2. You've added a job with its posting (`rb new-job <link to the posting>`, or `rb new-job` and then pasting the posting into `posting.md`), and written your `interest_notes` in its `application.yaml`.
 3. Some content in `base.yaml` is `confirmed`. The agent can only use confirmed items.
 
+**Checking it worked:** after setting up your assistant, ask it to call `agent_brief` for a job (or to list your applications). The **AI agent** card on the tracker's home page, and `rb status`, then say "Connected" with the channel (MCP or HTTP API) and when; for MCP it also shows your assistant's name if it sends one. If it still says "No AI agent has connected yet", the assistant hasn't reached resume-builder: see Troubleshooting (section 10).
+
 ### The MCP command
 
 Every MCP setup below uses the same command, with your own path to the resume-builder folder:
@@ -68,7 +70,7 @@ Test it by hand. It should print a "ready" line, then wait. Press Ctrl+C to stop
 
 ```sh
 docker compose -f /path/to/resume-builder/compose.yaml run --rm -T app rb mcp
-# resume-builder MCP server for `you` ready (25 tools).
+# resume-builder MCP server for `you` ready (27 tools).
 ```
 
 ### Keep coding agents out of your data folder
@@ -443,6 +445,8 @@ The agent can't create the job, fill in your `interest_notes`, or add companies.
 
 | Problem | Fix |
 | --- | --- |
+| The home page says "No AI agent has connected yet" after setup | The assistant hasn't reached resume-builder. For MCP, run the MCP command from section 2 by hand and look for "ready"; then restart the assistant. For the HTTP API, check the token and that the address is `localhost` or `127.0.0.1`. |
+| The home page says the assistant used a token that's "no longer valid" | You replaced the token with `rb token`. Issue a new one with `rb token --actor agent` and update your assistant's settings. |
 | The assistant says the server failed to start or timed out | Run the MCP command from section 2 by hand. If it builds the image, wait for that to finish and try again. Increase the client's timeout if it has one. |
 | "command not found: docker" in a desktop app | Use the full path to `docker` as the `command` (section 2). |
 | "Which user?" | You have several user folders: add `--user <you>` after `rb` in the MCP command. |

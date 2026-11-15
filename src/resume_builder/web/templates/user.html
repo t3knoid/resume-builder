@@ -16,6 +16,27 @@
   <p class="muted">Saved documents: {{ status.snapshots.count }} of {{ status.snapshots.limit }}{% if status.snapshots.near_limit %} <span class="stale">(near the limit)</span>{% endif %}</p>
 </div>
 <div class="card">
+  <h2>AI agent</h2>
+  {% if agent.state == "connected" %}
+    <p class="ok">Connected{% if agent.last_channel %} through {{ {"mcp": "MCP", "api": "the HTTP API", "cli": "copy and paste (rb propose)"}.get(agent.last_channel, agent.last_channel) }}{% endif %}. Last active {{ agent.last_active }}.</p>
+  {% elif agent.state == "token_unused" %}
+    <p class="stale">An agent token was issued on {{ agent.channels.api.token_issued[:10] }} but hasn't been used yet.</p>
+  {% else %}
+    <p class="muted">No AI agent has connected yet.</p>
+  {% endif %}
+  {% for h in agent.hints %}<p class="{{ 'bad' if 'no longer valid' in h else 'muted' }}">{{ h }}</p>{% endfor %}
+  <table>
+    <tr><th>Channel</th><th>Last active</th><th></th></tr>
+    <tr><td>MCP</td><td>{{ agent.channels.mcp.last_seen or "never" }}</td><td class="muted">{% if agent.channels.mcp.client %}{{ agent.channels.mcp.client }}{% endif %}</td></tr>
+    <tr><td>HTTP API</td><td>{{ agent.channels.api.last_seen or "never" }}</td><td class="muted">{% if agent.channels.api.token_issued %}token issued {{ agent.channels.api.token_issued[:10] }}{% else %}no agent token{% endif %}</td></tr>
+    <tr><td>Copy and paste</td><td>{{ agent.channels.cli.last_seen or "never" }}</td><td></td></tr>
+  </table>
+  {% if agent.recent %}<p><strong>Recent:</strong></p><ul>{% for r in agent.recent %}<li>{{ r.at }} · {{ r.operation | replace("_", " ") }}{% if r.job_id %} · <a href="/u/{{ user }}/jobs/{{ r.job_id }}">{{ r.job_id }}</a>{% endif %}{% if r.result != "ok" %} <span class="muted">({{ r.result }})</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+  {% if agent.waiting.jobs or agent.waiting.events %}<p class="stale">Waiting for you:
+    {% if agent.waiting.jobs %}<a href="/u/{{ user }}/proposals">{{ agent.waiting.jobs }} proposed job(s)</a>{% endif %}{% if agent.waiting.jobs and agent.waiting.events %}, {% endif %}{% if agent.waiting.events %}{{ agent.waiting.events }} proposed event(s) (on their job pages){% endif %}.</p>{% endif %}
+  <p class="muted">Setup for Claude, Gemini, ChatGPT and Copilot: docs/AI-AGENTS.md.</p>
+</div>
+<div class="card">
   <h2>Upcoming actions</h2>
   {% if actions.upcoming %}<table><tr><th>Due</th><th>Action</th><th>Job</th></tr>
   {% for a in actions.upcoming %}<tr><td class="{{ 'bad' if a.overdue else '' }}">{{ a.next_action_due or "—" }}</td><td>{{ a.next_action }}</td><td><a href="/u/{{ user }}/jobs/{{ a.job_id }}">{{ a.job_id }}</a></td></tr>{% endfor %}</table>

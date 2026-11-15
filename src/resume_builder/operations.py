@@ -135,6 +135,9 @@ def invoke(app, ctx: RequestContext, name: str, payload: dict | BaseModel | None
     else:
         data = op.input_model.model_validate(payload or {})
     space = app.space(ctx.user_id)
+    if ctx.actor == "agent":  # "last seen" for the agent status (issue #32): reads aren't audited
+        from .services.agent_status import note_seen
+        note_seen(space, ctx.channel)
     try:
         result = op.handler(space, ctx, data)
     except Exception as exc:  # audit failures of writes too (B6)

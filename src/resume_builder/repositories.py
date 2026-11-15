@@ -506,6 +506,24 @@ class SqliteStorage:
     def has_tokens(self, actor: str) -> bool:
         return self.conn.execute("SELECT 1 FROM tokens WHERE actor = ? AND revoked = 0", (actor,)).fetchone() is not None
 
+    def active_token_created(self, actor: str) -> str | None:
+        row = self.conn.execute("SELECT created_at FROM tokens WHERE actor = ? AND revoked = 0 ORDER BY id DESC LIMIT 1", (actor,)).fetchone()
+        return row["created_at"] if row else None
+
+    def replaced_token_actor(self, token_hash: str) -> str | None:
+        row = self.conn.execute("SELECT actor FROM tokens WHERE token_hash = ? AND revoked = 1", (token_hash,)).fetchone()
+        return row["actor"] if row else None
+
+    def last_audit_at(self, actor: str, channel: str, exclude: tuple[str, ...] = ()) -> str | None:
+        marks = ",".join("?" * len(exclude)) or "''"
+        row = self.conn.execute(
+            f"SELECT MAX(at) AS at FROM audit_log WHERE actor = ? AND channel = ? AND operation NOT IN ({marks})",
+            (actor, channel, *exclude)).fetchone()
+        return row["at"] if row else None
+
+    def audit_entries_by(self, actor: str, limit: int = 20) -> list[dict]:
+        return _all(self.conn.execute("SELECT * FROM audit_log WHERE actor = ? ORDER BY id DESC LIMIT ?", (actor, limit)))
+
     # ------------------------------------------------------------ website sign-in (hashes only)
     def add_web_session(self, session_hash: str, actor: str, expires_at: str) -> None:
         now = now_iso()

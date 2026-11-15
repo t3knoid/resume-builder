@@ -632,7 +632,7 @@ Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It
 
 **Signing in** lets you confirm or discard what your AI agent proposed right on the site, instead of running `rb confirm-job` and friends. Run `rb web-login` and open the link it prints (it works once, for 10 minutes), or use **Sign in** at the top of any page with an owner token (`rb token --actor owner`); agent tokens can't sign in. You stay signed in on that browser for up to 7 days, or until 12 hours without using the site; **Sign out** ends it at once. Nothing else on the website changes your data.
 
-- **Home:** sync status and anything needing attention, upcoming actions (overdue in red), stale applications, proposed events and jobs waiting for you.
+- **Home:** sync status and anything needing attention, whether your AI agent is set up and when it was last active, upcoming actions (overdue in red), stale applications, proposed events and jobs waiting for you.
 - **Applications:** filter by stage, company, department; sort by any column.
 - **Application:** posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
 - **Company:** every application to that company over time.
@@ -726,6 +726,8 @@ There are three ways to connect it:
 - **HTTP API** for your own scripts, with a token from `rb token --actor agent`.
 
 **Step-by-step instructions for each assistant are in [AI-AGENTS.md](AI-AGENTS.md).**
+
+**Is it connected?** The website's home page has an **AI agent** card, and `rb status` has a line, that say whether an agent is connected and through which channel, when it was last active, and what it last did. "No AI agent has connected yet" means nothing has reached the app: check your assistant's setup in [AI-AGENTS.md](AI-AGENTS.md), then ask it to call `agent_brief`. "Token issued, not used yet" means the HTTP API token hasn't been used. If your assistant keeps using an API token you've since replaced with `rb token`, the card says so.
 
 Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `rb discard-event <n>`.
 

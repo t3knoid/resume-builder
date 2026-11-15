@@ -45,7 +45,14 @@ def status(space: UserSpace) -> dict:
         "seed_version": space.app.settings.seed_version,
         "event_drafts_waiting": len(space.repo.event_drafts()),
         "job_proposals_waiting": len(space.repo.list_intake_proposals("pending")),
+        "agent": _agent_summary(space),
     }
+
+
+def _agent_summary(space: UserSpace) -> dict:
+    from .agent_status import summary
+    s = summary(space)
+    return {"state": s["state"], "last_active": s["last_active"], "last_channel": s["last_channel"], "stale_token": s["stale_token"]}
 
 
 @operation("space_status", "space:check", Empty, "Sync status, problems, example entries left, limits.")
