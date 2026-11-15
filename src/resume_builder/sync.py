@@ -534,6 +534,21 @@ def _resolve_keep_app(space: UserSpace, rel: str) -> None:
 
 
 # ---------------------------------------------------------------- status file (R7.9)
+def used_intake_files(space: UserSpace) -> list[tuple[str, str]]:
+    """(file, job id) for intake files that started a job and still hold that same text: safe to delete."""
+    from .models import content_hash
+
+    out = []
+    for row in space.repo.file_posting_captures():
+        path = space.data_dir / row["source_path"]
+        if not path.is_file():
+            continue
+        text, _ = yamlio.read_text_safely(path, row["source_path"])
+        if text is not None and content_hash(text) == row["content_hash"]:
+            out.append((row["source_path"], row["job_id"]))
+    return sorted(set(out))
+
+
 
 def write_status_file(space: UserSpace, report: SyncReport) -> None:
     from .db import now_iso
@@ -558,6 +573,11 @@ def write_status_file(space: UserSpace, report: SyncReport) -> None:
         for r in report.by("missing"):
             lines.append(f"## {r.rel} (missing)")
             lines += ["- " + p.render() for p in r.problems] + [""]
+    used = used_intake_files(space)
+    if used:
+        lines += ["", "## Intake files already used", "",
+                  "These postings are saved with their jobs. You can delete the files (the app never does).", ""]
+        lines += [f"- `{rel}`: started `{job}`" for rel, job in used]
     warnings = [(r.rel, p) for r in report.results for p in r.problems if p.severity == "warning" and r.result == "applied"]
     if warnings:
         lines += ["", "## Warnings (not blocking)", ""]

@@ -37,6 +37,7 @@ The app runs in Docker with four mounts (PRD section 11):
 ```text
 /data/<user>/             # bind mount: input files and write-back working copies
   START-HERE.md, SYNC-STATUS.md
+  intake/                 # pasted posting text for `rb new-job --file`; read only on command, never changed by the app
   user.yaml               # settings: name, publish target, secret names, template, limits
   base.yaml               # content library input: id, text, tags, metric, evidence, limits, status
   organizations.yaml      # companies and departments (pick-list source)
@@ -157,7 +158,7 @@ The app runs in Docker with four mounts (PRD section 11):
 
 1. `rb new-job` starts every job (picks or adds company/department, builds the job id, creates the application at stage `interested` and the job folder). What else it does depends on what it's given:
    - **The posting's link:** `rb new-job <url>`. Also fetches the posting once, previews the fields read from it, and writes them to `application.yaml` and the posting to `posting.md` after one confirmation.
-   - **The site needs a sign-in:** copy the posting text to a file, then `rb new-job --stdin <url> < posting.txt`. Same as above, from the pasted text.
+   - **The site needs a sign-in:** save the posting text in the user's intake folder, then `rb new-job --file intake/<name>.txt <url>` (or pipe it: `rb new-job --stdin <url> < posting.txt`). Same as above, from the pasted text.
    - **No link at all:** `rb new-job`. Seeds `posting.md` and `application.yaml`; the user pastes the posting into `posting.md` and sync picks it up.
 2. As the agent: use the resume-builder MCP tools if connected (`agent_brief`, then `profile_write` and `document_propose` with kind `fit_report`). Otherwise `rb brief <job-id>` and submit drafts with `rb propose <job-id> profile|fit_report|...` (stdin). Never edit files in the user's data folder directly: that bypasses the agent's checks.
 3. Fix any validation failures reported by sync or the API.

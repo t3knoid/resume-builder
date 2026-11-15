@@ -323,6 +323,11 @@ class SqliteStorage:
             (content_hash, source_kind, source_url, source_path)))
         return PostingCapture.model_validate(row) if row else None
 
+    def file_posting_captures(self) -> list[dict]:
+        return _all(self.conn.execute(
+            "SELECT source_path, job_id, content_hash FROM posting_captures WHERE source_kind = 'file' AND job_id IS NOT NULL "
+            "ORDER BY source_path, id"))
+
     def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
         row = _one(self.conn.execute("SELECT job_id FROM posting_captures WHERE id = ?", (capture_id,)))
         if row is None:

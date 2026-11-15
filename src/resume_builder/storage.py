@@ -83,6 +83,9 @@ class Storage(Protocol):
                                    source_path: str | None) -> PostingCapture | None:
         """The latest capture with this content and source that no job uses yet (a repeated preview)."""
         ...
+    def file_posting_captures(self) -> list[Row]:
+        """Captures read from the user's intake folder and used for a job: source_path, job_id, content_hash."""
+        ...
     def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
         """Link a capture that has no job yet to a job. Allowed once; a capture is never moved."""
         ...

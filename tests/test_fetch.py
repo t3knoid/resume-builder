@@ -213,7 +213,7 @@ def test_bad_urls_are_refused_before_any_connection(url, why):
 def test_every_failure_shows_the_paste_fallback(server, fetcher):
     with pytest.raises(FetchFailed) as e:
         fetcher.fetch(f"{server}/login", LIMITS)
-    assert "rb new-job --stdin <link>" in str(e.value)
+    assert "rb new-job --file intake/<name>.txt <link>" in str(e.value)
 
 
 @pytest.mark.parametrize("ip,public", [
@@ -269,7 +269,7 @@ def test_fetch_can_be_turned_off(sample, owner):
     sample.repo.put_settings(s.model_copy(update={"intake": s.intake.model_copy(update={"fetch": False})}), "owner")
     with pytest.raises(FetchFailed) as e:
         fetch_posting(sample, owner, "https://jobs.example.com/1")
-    assert reason(e) == "fetch-disabled" and "rb new-job --stdin" in str(e.value)
+    assert reason(e) == "fetch-disabled" and "rb new-job --file" in str(e.value)
     assert stub.calls == []
     assert _fetch_audits(sample)[0]["result"].startswith("refused")
 

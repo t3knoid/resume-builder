@@ -112,7 +112,10 @@ def _intake(app: App, ctx: RequestContext, args) -> int:
         if getattr(args, name):
             overrides.setdefault(name, getattr(args, name))
 
-    preview = invoke(app, ctx, "job_intake_preview", {"url": args.url, "text": text})
+    if args.file:  # read by the file adapter, from the intake folder only
+        preview = invoke(app, ctx, "job_intake_preview_file", {"file": args.file, "url": args.url})
+    else:
+        preview = invoke(app, ctx, "job_intake_preview", {"url": args.url, "text": text})
     _show_preview(preview, overrides)
     interactive = not args.yes and not args.stdin and sys.stdin.isatty()
     payload = {"capture_id": preview["capture_id"], "fields": preview["fields"], "overrides": overrides,
@@ -175,16 +178,22 @@ def _intake(app: App, ctx: RequestContext, args) -> int:
             return 0
 
     result = invoke(app, ctx, "job_intake", payload)
+    used_file = (f"The posting is saved with the job, so you can delete {preview['source_path']} now."
+                 if preview.get("source_path") else None)
     if result.get("recaptured"):
         print(f"\nSaved the posting for {result['job_id']}.")
         if result.get("note"):
             print(result["note"])
+        if used_file:
+            print(used_file)
         return 0
     print(f"\nCreated {result['job_id']} in {result['folder']}")
     for kind, slug in result["created"].items():
         print(f"  Added {kind} `{slug}` to organizations.yaml.")
     if result.get("note"):
         print(f"  Note: {result['note']}")
+    if used_file:
+        print(f"  {used_file}")
     print("Next:")
     for step in result["next"]:
         print(f"  - {step}")
@@ -260,6 +269,8 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("link", nargs="?", metavar="url",
                    help="the posting's link: fetched once and read (same as --url); with --stdin, only recorded as its link")
     n.add_argument("--url", help="the posting's link (same as the positional url)")
+    n.add_argument("--file", metavar="intake/NAME.txt",
+                   help="read the posting text from a file in your intake folder instead of fetching the link")
     n.add_argument("--stdin", action="store_true", help="read the posting text from stdin instead of fetching the link")
     n.add_argument("--company", help="company slug or name (with a posting: default is the match suggested from it)")
     n.add_argument("--department", help="department slug or name")
@@ -463,7 +474,9 @@ def _run(app: App, args) -> int | None:
         if args.link and args.url and args.link != args.url:
             raise AppError("Give the posting's link once: either `rb new-job <url>` or `--url <url>`.")
         args.url = args.link or args.url
-        if args.url or args.stdin:  # a posting to read: job intake (PRD 8.13)
+        if args.file and args.stdin:
+            raise AppError("Use --file or --stdin, not both.")
+        if args.url or args.stdin or args.file:  # a posting to read: job intake (PRD 8.13)
             return _intake(app, ctx, args)
         _print(_new_job_interactive(app, ctx, args))
     elif c == "list":

@@ -127,8 +127,9 @@ data/<you>/
   base.yaml               your content library
   organizations.yaml      companies and departments you've looked at
   profiles/public.yaml    what your general resume shows
+  intake/                 posting text you saved from a browser, for rb new-job --file (see its README.md)
   jobs/<job-id>/
-    posting.md            the job description you pasted
+    posting.md            the job description
     application.yaml      the application record and its event history
     profile.yaml          the tailored resume for this job (ids only)
     fit-report.md         how well you match, and what's missing
@@ -444,13 +445,15 @@ rb new-job <url> --yes                                                          
 
 `--url <url>` works the same as giving the link on its own.
 
-**When the link can't be read.** Some sites need you to sign in (LinkedIn, for example) or show their postings only with JavaScript. `rb new-job` then stops, says why, and creates nothing. Copy the posting text from your browser into a text file and pipe it in, with the link if you have it:
+**When the link can't be read.** Some sites need you to sign in (LinkedIn, for example) or show their postings only with JavaScript. `rb new-job` then stops, says why, and creates nothing. Copy the posting text from your browser into a text file in your **intake folder** (`data/<you>/intake/`), then point `rb new-job` at it, with the link if you have it:
 
 ```sh
-rb new-job --stdin https://www.linkedin.com/jobs/view/123 < posting.txt
+rb new-job --file intake/acme-sre.txt https://www.linkedin.com/jobs/view/123
 ```
 
-Piped input can't also answer questions, so this shows the preview; run the same command with `--yes` (and `--company` if needed) to create the job.
+The review works the same as with a link. The app reads a file in `intake/` only when you run this; it never changes, moves or deletes it. Once the job is created, the posting is kept with the job, so you can delete the file; `SYNC-STATUS.md` lists the files you've already used. The file must be UTF-8 text and smaller than 1 MB.
+
+You can also pipe the text in: `rb new-job --stdin <link> < posting.txt`. Piped input can't also answer questions, so this shows the preview; run the same command with `--yes` (and `--company` if needed) to create the job.
 
 **Already tracking it?** If a job has the same link (tracking parameters ignored) or the same company and posting id, `rb new-job` says so. In a terminal it offers to save the new copy of the posting for that job instead (`--recapture <job-id>`); `--allow-duplicate` starts a separate job anyway. Re-capturing replaces the posting part of `posting.md` and keeps your notes. If you pasted or edited the posting text yourself, it's left alone unless you add `--replace`.
 
@@ -719,7 +722,8 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 | `rb init-user <name>`                                                              | Create another user folder                          |
 | `rb export-files`                                                                  | Recreate missing files from the database            |
 | `rb new-job <url> [--company --department --title --create --set F=V --yes]`       | Start a job from its posting link, reviewed once    |
-| `rb new-job --stdin [<url>] < posting.txt`                                         | The same, from pasted posting text                  |
+| `rb new-job --file intake/<name>.txt [<url>]`                                      | The same, from posting text saved in `intake/`      |
+| `rb new-job --stdin [<url>] < posting.txt`                                         | The same, from piped posting text                   |
 | `rb new-job <url> --recapture <job-id> [--replace]`                                | Save a new copy of a posting for an existing job    |
 | `rb new-job [--company --department --title --source --create]`                    | Start a job without a link (paste the posting later) |
 | `rb list [--stage --company --all]`                                                | List applications                                   |
@@ -770,7 +774,7 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 | Contact details missing from PDFs                 | Set `RB_CONTACT_EMAIL`/`RB_CONTACT_PHONE` in `.env`, then `docker compose up -d`.                               |
 | "That token isn't valid"                          | It was replaced. Issue a new one: `rb token --actor agent`.                                                           |
 | A job folder disappeared                          | Nothing was deleted: `rb export-files`.                                                                               |
-| `rb new-job <url>` says the page needs a sign-in or JavaScript, or has too little text | Copy the posting from your browser into a file: `rb new-job --stdin <link> < posting.txt`. |
+| `rb new-job <url>` says the page needs a sign-in or JavaScript, or has too little text | Copy the posting from your browser into `intake/<name>.txt`, then `rb new-job --file intake/<name>.txt <link>`. |
 | `rb new-job <url>` says "already tracking this posting" | Use `--recapture <job-id>` to update that job's posting, or `--allow-duplicate` for a separate job.                    |
 | Something else                                    | `docker compose logs app`, then `rb doctor`.                                                                        |
 
@@ -779,5 +783,5 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 - Pushing the public site to its target automatically (`rb publish` exports it; you copy it).
 - More than one design template (`classic` only).
 - Importing an existing resume into `base.yaml`.
-- Starting a job from a file in your folder (`rb new-job --file`), and letting the AI agent propose a new job for you to confirm. For now, pipe pasted text with `--stdin`.
+- Letting the AI agent propose a new job from a posting, for you to confirm.
 - File changes are detected by checking every few seconds, not by instant notification. It works the same across every operating system's Docker mounts.

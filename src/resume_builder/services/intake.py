@@ -335,15 +335,22 @@ class IntakePreviewIn(BaseModel):
            writes=True)
 def job_intake_preview(space: UserSpace, ctx: RequestContext, data: IntakePreviewIn) -> dict:
     url = data.url.strip() if data.url and data.url.strip() else None
-    adapter, notes = None, []
     if data.text and data.text.strip():
-        capture = capture_from_text(data.text, source_kind="stdin", source_url=url)
-        extraction = posting_fields.extract(capture)
-    else:
-        result = capture_url(space, ctx, url)
-        capture, extraction, adapter, notes = result.capture, result.extraction, result.adapter, result.notes
+        return preview_text(space, ctx, data.text, source_kind="stdin", url=url)
+    result = capture_url(space, ctx, url)
+    capture = _keep_capture(space, ctx, result.capture)
+    return _preview(space, capture, result.extraction, adapter=result.adapter, notes=result.notes)
+
+
+def preview_text(space: UserSpace, ctx: RequestContext, text: str, *, source_kind: str,
+                 source_path: str | None = None, url: str | None = None) -> dict:
+    """The preview for pasted posting text (R13.2): piped in, or read from the user's intake
+    folder by the file adapter (`job_intake_preview_file`)."""
+    capture = capture_from_text(text, source_kind=source_kind, source_path=source_path,
+                                source_url=url.strip() if url and url.strip() else None)
+    extraction = posting_fields.extract(capture)
     capture = _keep_capture(space, ctx, capture)
-    return _preview(space, capture, extraction, adapter=adapter, notes=notes)
+    return _preview(space, capture, extraction)
 
 
 def _keep_capture(space: UserSpace, ctx: RequestContext, capture: PostingCapture) -> PostingCapture:
@@ -374,6 +381,7 @@ def _preview(space: UserSpace, capture: PostingCapture, extraction: Extraction, 
     return {
         "capture_id": capture.id,
         "source": source_label(capture),
+        "source_path": capture.source_path,
         "adapter": adapter,
         "fields": [f.model_dump() for f in extraction.as_list()],
         "disagreements": extraction.disagreements,

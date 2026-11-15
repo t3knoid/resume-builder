@@ -36,6 +36,7 @@ SEED_FILES = {
     "organizations.yaml": "organizations.yaml",
     "profiles/public.yaml": "public.yaml",
     "START-HERE.md": "START-HERE.md",
+    "intake/README.md": "intake-README.md",
 }
 
 
@@ -70,7 +71,7 @@ def repair(space: UserSpace, ctx: RequestContext, values: dict | None = None) ->
     from the seed, so deleting base.yaml by accident can't wipe the content library.
     """
     created = []
-    for d in (space.data_dir, space.data_dir / "profiles", space.data_dir / "jobs"):
+    for d in (space.data_dir, space.data_dir / "profiles", space.data_dir / "jobs", space.data_dir / "intake"):
         if not d.exists():
             d.mkdir(parents=True, exist_ok=True)
             created.append(str(d))
@@ -262,3 +263,48 @@ def profile_propose_text(space: UserSpace, ctx: RequestContext, data: ProfileTex
     except ValidationError as exc:
         raise ValidationFailed("The profile doesn't match the expected format.", pydantic_problems(exc, rel, doc, yamlio.line_of))
     return profile_write(space, ctx, ProfileWriteIn(key=data.key, profile=profile))
+
+
+# ---------------------------------------------------------------- job intake from the user's intake folder (R13.2, R13.4, D25)
+
+INTAKE_DIR = "intake"
+
+
+class IntakeFileIn(BaseModel):
+    file: str = Field(description="A text file in your intake folder, e.g. intake/acme-sre.txt (or just acme-sre.txt)")
+    url: str | None = Field(None, description="The posting's link, recorded as its link (not fetched)")
+
+
+def intake_rel(name: str) -> str:
+    """`intake/<name>` for a file named relative to the user's folder or to the intake folder."""
+    rel = name.strip().replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    if not rel or rel.startswith("/") or ":" in rel.split("/", 1)[0] or ".." in rel.split("/"):
+        raise ValidationFailed(f"`{name}` isn't a file in your intake folder. Example: intake/acme-sre.txt")
+    return rel if rel.startswith(INTAKE_DIR + "/") else f"{INTAKE_DIR}/{rel}"
+
+
+@operation("job_intake_preview_file", "application:write", IntakeFileIn,
+           "Like job_intake_preview, from a posting saved as a text file in the user's intake folder.", writes=True)
+def job_intake_preview_file(space: UserSpace, ctx: RequestContext, data: IntakeFileIn) -> dict:
+    """The file adapter reads the file (safe-reading limits, R7.7); the service does the rest.
+    Only files inside the intake folder are read, and only when asked; nothing there is changed."""
+    from .services.intake import preview_text
+
+    rel = intake_rel(data.file)
+    folder = (space.data_dir / INTAKE_DIR).resolve()
+    try:
+        real = (space.data_dir / rel).resolve(strict=True)
+    except (FileNotFoundError, NotADirectoryError):
+        raise NotFound(f"There's no `{rel}` in your folder. Save the posting text there first (see {INTAKE_DIR}/README.md).") from None
+    if not real.is_relative_to(folder) or not real.is_file():
+        raise ValidationFailed(f"`{rel}` isn't a file in your intake folder.")
+    if real.name.lower() == "readme.md" and real.parent == folder:
+        raise ValidationFailed(f"{INTAKE_DIR}/README.md explains the folder. Save the posting in a file of its own, "
+                               f"for example {INTAKE_DIR}/acme-sre.txt.")
+    text, problems = yamlio.read_text_safely(real, rel)
+    if text is None:
+        raise ValidationFailed(f"Can't read `{rel}`.", problems)
+    return preview_text(space, ctx, text, source_kind="file", source_path=rel, url=data.url)
+

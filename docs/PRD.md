@@ -136,9 +136,11 @@ resume-builder/
     organizations.yaml      # companies and their departments, reused across jobs
     profiles/
       public.yaml           # selection for the public site
+    intake/                 # posting text saved from a browser for job intake; read only on command (R13.4)
+      README.md
     jobs/
       <job-id>/
-        posting.md          # pasted posting text
+        posting.md          # the posting, captured by intake or pasted
         application.yaml    # tracker record and event log
         profile.yaml        # working copy of the AI-generated selection (ids only)
         fit-report.md       # working copy of the fit report
