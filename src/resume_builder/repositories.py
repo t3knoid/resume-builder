@@ -16,7 +16,8 @@ from .clock import now_iso
 from .errors import Conflict, NotFound
 from .models import (
     Application, Bullet, Certification, Company, ContentLibrary, Department, Education, Event,
-    OrganizationRegistry, Profile, Project, Role, SkillGroup, SummaryPhrase, UserSettings,
+    OrganizationRegistry, PostingCapture, Profile, Project, Role, SkillGroup, SummaryPhrase, UserSettings,
+    content_hash,
 )
 
 
@@ -282,6 +283,45 @@ class SqliteStorage:
 
     def delete_event_draft(self, draft_id: int) -> None:
         self.conn.execute("DELETE FROM event_drafts WHERE id = ?", (draft_id,))
+
+    # ------------------------------------------------------------ captured postings (append-only, R13.10)
+    _CAPTURE_LIST_COLUMNS = "id, job_id, source_kind, source_url, source_path, content_type, content_hash, captured_at, created_by, created_at"
+
+    def add_posting_capture(self, capture: PostingCapture, actor: str) -> PostingCapture:
+        if capture.id is not None:
+            raise Conflict("A posting capture is stored once; it can't be saved again.")
+        digest = content_hash(capture.raw_content)
+        if capture.content_hash is not None and capture.content_hash != digest:
+            raise Conflict("The capture's content_hash doesn't match its content.")
+        now = now_iso()
+        cur = self.conn.execute(
+            "INSERT INTO posting_captures (job_id, source_kind, source_url, source_path, content_type, raw_content, markdown, "
+            "content_hash, captured_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (capture.job_id, capture.source_kind, capture.source_url, capture.source_path, capture.content_type,
+             capture.raw_content, capture.markdown, digest, capture.captured_at, actor, now),
+        )
+        return capture.model_copy(update={"id": cur.lastrowid, "content_hash": digest, "created_by": actor, "created_at": now})
+
+    def get_posting_capture(self, capture_id: int) -> PostingCapture | None:
+        row = _one(self.conn.execute("SELECT * FROM posting_captures WHERE id = ?", (capture_id,)))
+        return PostingCapture.model_validate(row) if row else None
+
+    def latest_posting_capture(self, job_id: str) -> PostingCapture | None:
+        row = _one(self.conn.execute(
+            "SELECT * FROM posting_captures WHERE job_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1", (job_id,)))
+        return PostingCapture.model_validate(row) if row else None
+
+    def list_posting_captures(self, job_id: str) -> list[dict]:
+        return _all(self.conn.execute(
+            f"SELECT {self._CAPTURE_LIST_COLUMNS} FROM posting_captures WHERE job_id = ? ORDER BY captured_at, id", (job_id,)))
+
+    def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
+        row = _one(self.conn.execute("SELECT job_id FROM posting_captures WHERE id = ?", (capture_id,)))
+        if row is None:
+            raise NotFound(f"No posting capture {capture_id}.")
+        if row["job_id"] is not None:
+            raise Conflict(f"Posting capture {capture_id} already belongs to `{row['job_id']}`; captures are never moved.")
+        self.conn.execute("UPDATE posting_captures SET job_id = ? WHERE id = ? AND job_id IS NULL", (job_id, capture_id))
 
     # ------------------------------------------------------------ profiles
     def get_profile(self, key: str) -> Profile | None:

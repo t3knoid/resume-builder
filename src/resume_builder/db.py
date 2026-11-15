@@ -74,8 +74,21 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path, backup_fn=None) -> l
 
 
 def _split_sql(sql: str) -> list[str]:
-    lines = [ln for ln in sql.splitlines() if not ln.strip().startswith("--")]
-    return [s.strip() for s in "\n".join(lines).split(";") if s.strip()]
+    """Split a migration into statements. Uses SQLite's own completeness check, so a `;` inside a
+    trigger body (BEGIN ... END) or a string doesn't end the statement early."""
+    statements, buf = [], []
+    for line in sql.splitlines():
+        if not buf and line.strip().startswith("--"):
+            continue
+        buf.append(line)
+        chunk = "\n".join(buf).strip()
+        if sqlite3.complete_statement(chunk):
+            statements.append(chunk)
+            buf = []
+    tail = "\n".join(buf).strip()
+    if tail and not all(ln.strip().startswith("--") or not ln.strip() for ln in buf):
+        statements.append(tail)
+    return statements
 
 
 @contextlib.contextmanager

@@ -149,9 +149,9 @@ Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `a
 
 ### 3. Storage (`storage.py`)
 
-`Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()` and `load()`. Rows come back as plain dicts.
+`Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, captured job postings, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()` and `load()`. Rows come back as plain dicts.
 
-`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events are append-only, and every record carries `created_by/at` and `updated_by/at`.
+`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, and every record carries `created_by/at` and `updated_by/at`.
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 

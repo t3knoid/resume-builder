@@ -10,6 +10,8 @@ Rules for backends:
   nothing.
 - Never hard-delete content, organizations or applications; archive them (R7.10). Events are
   append-only (R6.4). Snapshots are deleted only through `delete_snapshot`, which services audit.
+  Posting captures are append-only: never edited or deleted; a capture without a job can be
+  linked to one, once (R13.10).
 - `created_by/at` and `updated_by/at` are kept on every record (B5).
 """
 
@@ -18,7 +20,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from typing import Any, Callable, Protocol
 
-from .models import Application, ContentLibrary, Event, OrganizationRegistry, Profile, UserSettings
+from .models import Application, ContentLibrary, Event, OrganizationRegistry, PostingCapture, Profile, UserSettings
 
 Row = dict[str, Any]
 
@@ -67,6 +69,19 @@ class Storage(Protocol):
     def add_event_draft(self, job_id: str, event: Event, actor: str) -> int: ...
     def event_drafts(self, job_id: str | None = None) -> list[Row]: ...
     def delete_event_draft(self, draft_id: int) -> None: ...
+
+    # ------------------------------------------------------------ captured postings (append-only, R13.10)
+    def add_posting_capture(self, capture: PostingCapture, actor: str) -> PostingCapture:
+        """Store a new capture; storage sets id, content_hash, created_by and created_at."""
+        ...
+    def get_posting_capture(self, capture_id: int) -> PostingCapture | None: ...
+    def latest_posting_capture(self, job_id: str) -> PostingCapture | None: ...
+    def list_posting_captures(self, job_id: str) -> list[Row]:
+        """Oldest first, without the content: id, source, content type, hash and times."""
+        ...
+    def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
+        """Link a capture that has no job yet to a job. Allowed once; a capture is never moved."""
+        ...
 
     # ------------------------------------------------------------ profiles and documents
     def get_profile(self, key: str) -> Profile | None: ...

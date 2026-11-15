@@ -7,6 +7,7 @@ format and the database cannot drift apart.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import date
 from typing import Annotated, Literal
@@ -346,6 +347,48 @@ class Application(Strict):
         if not v:
             raise ValueError("needs at least one event (the first is the stage_change to `interested`)")
         return v
+
+
+# ---------------------------------------------------------------- captured postings
+
+CaptureSource = Literal["url", "file", "stdin"]
+CaptureContentType = Literal["text/html", "text/plain"]
+
+
+class PostingCapture(BaseModel):
+    """A job posting exactly as it was fetched or pasted (PRD R13.10). Never edited after it is stored.
+
+    Not a YAML input, and deliberately not `Strict`: whitespace in the captured text is kept as is.
+    `id`, `content_hash`, `created_by` and `created_at` are set by storage.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int | None = None
+    job_id: str | None = Field(None, description="NULL until the intake is confirmed and the job exists")
+    source_kind: CaptureSource
+    source_url: str | None = None
+    source_path: str | None = Field(None, description="Relative to the user's data folder, for source_kind file")
+    content_type: CaptureContentType
+    raw_content: str = Field(description="The page or text exactly as received")
+    markdown: str = Field(description="The posting converted mechanically to Markdown, wording unchanged")
+    content_hash: str | None = Field(None, description="sha256 of raw_content, hex")
+    captured_at: str = Field(description="When it was fetched or read, ISO 8601")
+    created_by: str | None = None
+    created_at: str | None = None
+
+    @model_validator(mode="after")
+    def _source(self):
+        if self.source_kind == "url" and not self.source_url:
+            raise ValueError("a capture from a URL needs `source_url`")
+        if self.source_kind == "file" and not self.source_path:
+            raise ValueError("a capture from a file needs `source_path`")
+        return self
+
+
+def content_hash(text: str) -> str:
+    """The hash stored with a capture: sha256 of the UTF-8 text, hex."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------- documents
