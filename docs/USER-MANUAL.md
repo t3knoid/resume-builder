@@ -183,6 +183,8 @@ Files are applied one at a time in this order: `user.yaml`, `organizations.yaml`
 
 Fix the file and save. The app never stops because of a bad file.
 
+`SYNC-STATUS.md` also lists jobs your AI agent proposed that are waiting for you (section 15), and files in `intake/` you've already used to start a job, which you can delete (section 7).
+
 ### Conflicts
 
 Conflicts are rare, because files sync within seconds. One happens when a file has a change the app hasn't applied yet (usually because the file currently has an error) and, in the meantime, the app changes the same field through a command or the agent. Changes to different fields merge automatically, and new events from both sides are kept. For the same field, choose:
@@ -431,7 +433,17 @@ It fetches the page once, keeps a copy of the posting exactly as published, and 
 
 Then it asks once: press Enter to create the job, or type a field name to change that value first. If the company isn't in your registry, it offers the closest matches or to add it. Nothing is created until you confirm.
 
-The job gets `application.yaml` with those fields, and `posting.md` with the posting, a **Source** line (link and date captured) and a **My notes** section for you. `interest_notes` is never filled in; that's yours to write.
+The job gets `application.yaml` with those fields, and `posting.md` with the posting, a **Source** line (link and date captured) and a **My notes** section for you.
+
+**What's never guessed.** A value is filled in only when the posting states it, and every value is checked against the words of the posting before it's used:
+
+- A field the posting doesn't mention stays empty. The preview lists them under "Not stated in the posting".
+- Remote, hybrid or onsite is set only when the posting says exactly one of them. If it mentions more than one, it's left for you to set, and the preview says why.
+- The salary is the range as posted, not an estimate. The company is filled in only when the page names it; otherwise you pick it.
+- The posting's wording is never changed in `posting.md`: only its layout is turned into plain text.
+- `interest_notes` (why you want the job) is never filled in. That's yours to write, and letters use only that for motivation.
+
+Values you type yourself (`--set`, `--title`, or a field you change in the review) are yours and aren't checked against the posting.
 
 Options (`rb new-job --help`):
 
@@ -457,14 +469,16 @@ You can also pipe the text in: `rb new-job --stdin <link> < posting.txt`. Piped 
 
 **Already tracking it?** If a job has the same link (tracking parameters ignored) or the same company and posting id, `rb new-job` says so. In a terminal it offers to save the new copy of the posting for that job instead (`--recapture <job-id>`); `--allow-duplicate` starts a separate job anyway. Re-capturing replaces the posting part of `posting.md` and keeps your notes. If you pasted or edited the posting text yourself, it's left alone unless you add `--replace`.
 
-**No link and no text?** Without a link or `--stdin`, `rb new-job` just creates the job: it asks for the company and department and seeds the folder. Paste the posting into `posting.md` and fill in `application.yaml` yourself.
+**Let your AI agent propose it.** An MCP or API agent given the link can propose the job instead; you review it with `rb confirm-job <n>`, which works like the review above (section 15).
+
+**No link and no text?** Without a link, `--file` or `--stdin`, `rb new-job` just creates the job: it asks for the company and department and seeds the folder. Paste the posting into `posting.md` and fill in `application.yaml` yourself.
 
 ```sh
 rb new-job --title "Platform Engineer"            # asks for company and department
 rb new-job --company "Acme Corp" --department "Platform" --title "SRE" --create
 ```
 
-Settings in `user.yaml` under `intake`: `fetch: false` turns fetching off (paste only), and `timeout_seconds` and `max_bytes` limit how long and how much it reads.
+Settings in `user.yaml` under `intake`: `fetch: false` turns fetching off (then use `--file` or `--stdin`), and `timeout_seconds` (default 20) and `max_bytes` (default 2000000, about 2 MB) limit how long it waits for a site and how much it reads.
 
 The job id is built for you: **date entered + company + department**, for example `2026-11-13-acme-corp-platform`. It never changes.
 

@@ -41,7 +41,7 @@ MONEY = r"(?:[$£€]|USD\s?)\s?\d[\d,]*(?:\.\d+)?\s?[kK]?"
 SALARY_RE = re.compile(
     rf"{MONEY}\s*(?:-|–|—|to)\s*(?:[$£€]|USD\s?)?\s?\d[\d,]*(?:\.\d+)?\s?[kK]?"
     r"(?:\s*(?:per|/|an?|a)\s*(?:year|yr|annum|hour|hr|month))?", re.I)
-JOB_ID_RE = re.compile(  # "Job ID # 810007", "Req #NW-4821", "Requisition ID: R-2231"; the id must contain a digit
+JOB_ID_RE = re.compile(  # "Job ID # 714052", "Req #NW-4821", "Requisition ID: R-2231"; the id must contain a digit
     r"\b(?:job\s*(?:id|number|code)|req(?:uisition)?(?:\s*(?:id|number))?|posting\s*(?:id|number))\b"
     r"\s*(?:#|:|-)?\s*#?\s*(?=[A-Z0-9_-]*\d)([A-Z0-9][A-Z0-9_-]{1,40})\b", re.I)
 URL_RE = re.compile(r"https?://[^\s<>()\"']+", re.I)
