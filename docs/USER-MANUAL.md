@@ -717,7 +717,7 @@ Nothing is lost: if you restored the wrong zip, the two pre-restore copies hold 
 
 ## 15. Working with an AI agent
 
-The app has no built-in AI. You use your own assistant, and it works as the **agent**: it can read your confirmed content and propose drafts, but it can't confirm content, approve letters, record events or create jobs (only propose them), publish, or change companies. Every draft passes the honesty checks.
+The app has no built-in AI and needs no paid AI plan: copy and paste works with any free chat assistant, and some assistants that connect directly have free plans too (see [AI-AGENTS.md](AI-AGENTS.md#do-i-need-a-paid-ai-plan)). You use your own assistant, and it works as the **agent**: it can read your confirmed content and propose drafts, but it can't confirm content, approve letters, record events or create jobs (only propose them), publish, or change companies. Every draft passes the honesty checks.
 
 There are three ways to connect it:
 
