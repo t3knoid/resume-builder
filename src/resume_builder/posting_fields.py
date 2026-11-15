@@ -99,6 +99,14 @@ def capture_texts(capture: PostingCapture) -> list[str]:
         for jp in postingtext.job_postings(raw):
             texts.append(_dump(jp))
             texts.extend(_strings(jp))
+    elif capture.content_type == "application/json":  # a site adapter's API response (D31)
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        if data is not None:
+            texts.append(_dump(data))
+            texts.extend(_strings(data))
     else:
         texts.append(raw)
     return [norm(t) for t in texts if t]

@@ -24,12 +24,12 @@ from ..security import RequestContext
 from ..space import UserSpace
 
 
-def fetch_limits(space: UserSpace) -> FetchLimits:
+def fetch_limits(space: UserSpace, json: bool = False) -> FetchLimits:
     s = space.user_settings.intake
-    return FetchLimits(timeout_seconds=s.timeout_seconds, max_bytes=s.max_bytes)
+    return FetchLimits(timeout_seconds=s.timeout_seconds, max_bytes=s.max_bytes, json=json)
 
 
-def fetch_posting(space: UserSpace, ctx: RequestContext, url: str) -> FetchedPage:
+def fetch_posting(space: UserSpace, ctx: RequestContext, url: str, json: bool = False) -> FetchedPage:
     """Fetch one posting URL with the user's limits, through the App's fetcher (R13.5–R13.9).
 
     Audited with the host only, never the full URL or the content (R13.27). Callers decide what to
@@ -40,7 +40,7 @@ def fetch_posting(space: UserSpace, ctx: RequestContext, url: str) -> FetchedPag
         space.audit(ctx, "posting:fetch", target=host, result="refused: intake.fetch is false")
         raise FetchFailed("fetch-disabled", "Fetching links is turned off (`intake.fetch: false` in user.yaml).")
     try:
-        page = space.app.fetcher.fetch(url, fetch_limits(space))
+        page = space.app.fetcher.fetch(url, fetch_limits(space, json=json))
     except FetchFailed as exc:
         space.audit(ctx, "posting:fetch", target=host, result=f"failed: {exc.reason}")
         raise
@@ -163,13 +163,15 @@ def capture_url(space: UserSpace, ctx: RequestContext, url: str) -> UrlCapture:
 def _capture_with_adapter(space: UserSpace, ctx: RequestContext, url: str, adapter) -> UrlCapture:
     fetched: list[FetchedPage] = []
 
-    def fetch(target: str) -> FetchedPage:
+    def fetch(target: str, accept: str = "page") -> FetchedPage:
+        if accept not in ("page", "json"):
+            raise FetchFailed("adapter-error", f"The site adapter `{adapter.name}` asked for `{accept}`; use \"page\" or \"json\".")
         host = (urlsplit(target).hostname or "").lower()
         if not any(host_matches(host, d) for d in adapter.domains):
             raise FetchFailed("adapter-domain", f"The site adapter `{adapter.name}` may only fetch from its own sites, not `{host or target}`.")
         if len(fetched) >= MAX_FETCHES:
             raise FetchFailed("adapter-limit", f"The site adapter `{adapter.name}` tried to make more than {MAX_FETCHES} requests.")
-        page = fetch_posting(space, ctx, target)
+        page = fetch_posting(space, ctx, target, json=accept == "json")
         fetched.append(page)
         return page
 
@@ -186,7 +188,18 @@ def _capture_with_adapter(space: UserSpace, ctx: RequestContext, url: str, adapt
 
     page, notes = result.page, []
     markdown = None
-    if result.markdown is not None:
+    if page.content_type == "application/json":
+        # Core can't turn arbitrary JSON into a posting, so the adapter must, and its text must keep the
+        # posting's wording block by block (D31). There is no generic conversion to fall back on.
+        md = postingtext.text_to_markdown(result.markdown or "")
+        if not md.strip():
+            raise FetchFailed("adapter-error", f"The site adapter `{adapter.name}` read JSON but returned no posting text.")
+        if not postingtext.wording_preserved(md, page.text, page.content_type):
+            space.audit(ctx, "posting:adapter", target=adapter.name, result="failed: wording changed")
+            raise FetchFailed("adapter-error", f"The site adapter `{adapter.name}` changed the posting's wording, "
+                                               "so its text can't be used.")
+        markdown = md
+    elif result.markdown is not None:
         md = postingtext.text_to_markdown(result.markdown)
         if md.strip() and postingtext.wording_preserved(md, page.text, page.content_type):
             markdown = md

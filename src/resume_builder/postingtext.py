@@ -409,12 +409,86 @@ def visible_text(html: str) -> str:
 
 
 def wording_preserved(markdown: str, raw: str, content_type: str) -> bool:
-    """True when every word of `markdown` appears in the captured page, in the same order: nothing
-    added, reworded or reordered (R13.11). List numbers are formatting and don't count."""
+    """True when the Markdown keeps the captured posting's wording: nothing added, reworded or
+    reordered (R13.11). List numbers are formatting and don't count.
+
+    For a page or text, every word must appear in the capture in the same order. For JSON (D31), an
+    API's key order isn't reading order, so the check is per block: each heading, paragraph and list
+    item must appear, words in order, within one string value of the JSON (HTML inside a value is
+    read as its text). Blocks may come in any order and from different values."""
+    if content_type == "application/json":
+        return _json_wording_preserved(markdown, raw)
     md = re.sub(r"^\s*\d+[.)]\s", "", markdown, flags=re.M)
     source = visible_text(raw) if content_type == "text/html" else raw
     it = iter(_plain_words(source))
     return all(w in it for w in _plain_words(md))
+
+
+def markdown_blocks(markdown: str) -> list[str]:
+    """Headings, paragraphs and list items of a Markdown text, each as one block, without the
+    Markdown markers (heading hashes, list bullets and numbers, quote marks)."""
+    blocks: list[str] = []
+    current: list[str] = []
+
+    def end():
+        if current:
+            blocks.append(" ".join(current))
+            current.clear()
+
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if not stripped or re.fullmatch(r"[-*_]{3,}|```.*", stripped):
+            end()
+            continue
+        heading = re.match(r"#{1,6}\s+(.*)", stripped)
+        item = re.match(r"(?:[-+*]|\d+[.)])\s+(.*)", stripped)
+        if heading or item:
+            end()
+            blocks.append((heading or item).group(1))
+            continue
+        current.append(re.sub(r"^>\s?", "", stripped))
+    end()
+    return [b for b in blocks if _plain_words(b)]
+
+
+def _json_strings(obj):
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _json_strings(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _json_strings(v)
+
+
+def _string_words(value: str) -> list[str]:
+    import html as htmllib
+
+    if "<" in value and ">" in value:  # HTML inside a JSON value: compare its text
+        b = _Builder()
+        b.feed(value)
+        b.close()
+        value = _text(b.root)
+    return _plain_words(htmllib.unescape(value))
+
+
+def _json_wording_preserved(markdown: str, raw: str) -> bool:
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return False
+    sources = [_string_words(s) for s in _json_strings(data)]
+
+    def in_one_value(block_words: list[str]) -> bool:
+        for words in sources:
+            it = iter(words)
+            if all(w in it for w in block_words):
+                return True
+        return False
+
+    blocks = markdown_blocks(markdown)
+    return bool(blocks) and all(in_one_value(_plain_words(b)) for b in blocks)
 
 
 def text_to_markdown(text: str) -> str:

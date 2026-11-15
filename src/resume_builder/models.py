@@ -359,7 +359,7 @@ class Application(Strict):
 # ---------------------------------------------------------------- captured postings
 
 CaptureSource = Literal["url", "file", "stdin"]
-CaptureContentType = Literal["text/html", "text/plain"]
+CaptureContentType = Literal["text/html", "text/plain", "application/json"]  # JSON: site adapters only (D31)
 
 
 class PostingCapture(BaseModel):

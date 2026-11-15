@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import http.client
 import ipaddress
+import json
 import re
 import socket
 import ssl
@@ -30,6 +31,7 @@ from .errors import AppError
 USER_AGENT = f"resume-builder/{__version__} (job posting intake; one request per user action)"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 CONTENT_TYPES = {"text/html": "text/html", "application/xhtml+xml": "text/html", "text/plain": "text/plain"}
+MAX_JSON_DEPTH = 64  # JSON nested deeper than this is refused before parsing
 PASTE_FALLBACK = ("Instead, copy the posting text from your browser into a file in your intake folder, "
                   "for example intake/<name>.txt, and run: rb new-job --file intake/<name>.txt <link>")
 
@@ -49,13 +51,14 @@ class FetchLimits:
     timeout_seconds: float = 20
     max_bytes: int = 2_000_000
     max_redirects: int = 5
+    json: bool = False  # a site adapter asked for a JSON API response; nothing else is accepted then (D31)
 
 
 @dataclass(frozen=True)
 class FetchedPage:
     url: str            # the URL that was asked for
     final_url: str      # after redirects
-    content_type: str   # text/html | text/plain
+    content_type: str   # text/html | text/plain | application/json (only when a site adapter asked for JSON)
     text: str
     fetched_at: str
 
@@ -129,9 +132,11 @@ class HttpPostingFetcher:
                 raise FetchFailed("rate-limited", "The site asked to slow down (HTTP 429).")
             if status != 200:
                 raise FetchFailed("http-error", f"The site answered with HTTP {status}.")
-            content_type = self._content_type(headers)
-            return FetchedPage(url=url, final_url=current, content_type=content_type,
-                               text=_decode(body, headers.get("content-type", ""), content_type), fetched_at=now_iso())
+            content_type = self._content_type(headers, limits)
+            text = _decode(body, headers.get("content-type", ""), content_type)
+            if content_type == "application/json":
+                check_json(text)
+            return FetchedPage(url=url, final_url=current, content_type=content_type, text=text, fetched_at=now_iso())
         raise FetchFailed("too-many-redirects", f"The page redirected more than {limits.max_redirects} times.")
 
     # ------------------------------------------------------------ one request
@@ -159,14 +164,14 @@ class HttpPostingFetcher:
         try:
             conn.request("GET", path, headers={
                 "User-Agent": USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
+                "Accept": "application/json" if limits.json else "text/html,application/xhtml+xml,text/plain;q=0.9",
                 "Accept-Encoding": "identity",
                 "Connection": "close",
             })
             resp = conn.getresponse()
             if resp.status in REDIRECT_STATUSES or resp.status != 200:
                 return resp.status, resp.headers, b""
-            self._content_type(resp.headers)  # refuse before reading the body
+            self._content_type(resp.headers, limits)  # refuse before reading the body
             declared = resp.headers.get("content-length")
             if declared and declared.isdigit() and int(declared) > limits.max_bytes:
                 raise self._too_big(limits)
@@ -214,8 +219,13 @@ class HttpPostingFetcher:
         return addresses[0]
 
     @staticmethod
-    def _content_type(headers) -> str:
+    def _content_type(headers, limits: FetchLimits) -> str:
         raw = (headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+        is_json = raw == "application/json" or (raw.startswith("application/") and raw.endswith("+json"))
+        if limits.json:
+            if not is_json:
+                raise FetchFailed("content-type", f"The site adapter asked for JSON, but the site sent `{raw or 'unknown'}`.")
+            return "application/json"
         if raw not in CONTENT_TYPES:
             raise FetchFailed("content-type", f"The link is not a web page or text (it is `{raw or 'unknown'}`).")
         return CONTENT_TYPES[raw]
@@ -250,3 +260,29 @@ def _decode(body: bytes, content_type_header: str, content_type: str) -> str:
         return body.decode(charset or "utf-8", errors="replace")
     except LookupError:
         return body.decode("utf-8", errors="replace")
+
+
+def check_json(text: str, max_depth: int = MAX_JSON_DEPTH) -> None:
+    """Refuse JSON nested deeper than `max_depth` (checked by scanning, before any parsing, so it
+    can't exhaust the parser), then refuse invalid JSON. The size limit applied while reading."""
+    depth, in_string, escaped = 0, False, False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "[{":
+            depth += 1
+            if depth > max_depth:
+                raise FetchFailed("json-too-deep", f"The site's JSON is nested more than {max_depth} levels deep.")
+        elif ch in "]}":
+            depth -= 1
+    try:
+        json.loads(text)
+    except ValueError as exc:
+        raise FetchFailed("invalid-json", f"The site's JSON isn't valid ({exc.msg}, line {exc.lineno}).") from None

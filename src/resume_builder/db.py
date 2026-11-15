@@ -65,12 +65,31 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path, backup_fn=None) -> l
     applied = []
     for version, f in pending:
         sql = f.read_text(encoding="utf-8")
-        with transaction(conn):
-            for statement in _split_sql(sql):
-                conn.execute(statement)
-            conn.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", (version, now_iso()))
+        # A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild)
+        # opts in with a first line `-- rb:foreign-keys-off`. Foreign keys can only be switched off
+        # outside a transaction, so it happens here; before committing, foreign_key_check must find
+        # nothing, or the whole migration rolls back. They are always switched back on.
+        fk_off = sql.lstrip().startswith(FK_OFF_MARKER)
+        if fk_off:
+            conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with transaction(conn):
+                for statement in _split_sql(sql):
+                    conn.execute(statement)
+                if fk_off:
+                    broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+                    if broken:
+                        raise sqlite3.IntegrityError(
+                            f"migration {version} would leave broken references: {[tuple(r) for r in broken[:5]]}")
+                conn.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", (version, now_iso()))
+        finally:
+            if fk_off:
+                conn.execute("PRAGMA foreign_keys = ON")
         applied.append(version)
     return applied
+
+
+FK_OFF_MARKER = "-- rb:foreign-keys-off"
 
 
 def _split_sql(sql: str) -> list[str]:

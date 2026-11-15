@@ -479,7 +479,7 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 | --- | --- |
 | R13.5 | A fetch is one HTTP(S) GET of the given URL, started only by an explicit intake request. No crawling, no follow-up requests for other pages, no retries in a loop. |
 | R13.6 | Fetches send no cookies, credentials or user data, and use a generic user agent that names the app but not the user. |
-| R13.7 | **Safe fetching:** only `http` and `https`; the resolved address of the host and of every redirect is checked, and loopback, private, link-local and other internal addresses are refused; at most 5 redirects; a timeout (default 20 s) and a size limit (default 2 MB); only HTML or plain-text responses are accepted. |
+| R13.7 | **Safe fetching:** only `http` and `https`; the resolved address of the host and of every redirect is checked, and loopback, private, link-local and other internal addresses are refused; at most 5 redirects; a timeout (default 20 s) and a size limit (default 2 MB); only HTML or plain-text responses are accepted, except that a site adapter may ask for a JSON API response (R13.16, D31), which is then the only type accepted for that request and is refused if nested too deeply or invalid. |
 | R13.8 | Fetched content is untrusted data. It is never executed or rendered as HTML in the website, and text passed to the agent is marked as posting content, not instructions. |
 | R13.9 | Fetching can be turned off per user (`intake.fetch: false` in `user.yaml`), in which case intake accepts pasted text only. Timeout and size limit are also set there, with seeded defaults. |
 
@@ -487,7 +487,7 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 
 | Id | Requirement |
 | --- | --- |
-| R13.10 | The **captured posting** is stored in the database with the source (URL or file), the time it was captured, and a content hash. It is never edited afterwards. Re-capturing the same job's posting adds a new capture; the latest one is current. |
+| R13.10 | The **captured posting** is stored in the database with the source (URL or file), its content type (HTML, plain text, or JSON from a site adapter), the time it was captured, and a content hash. It is never edited afterwards. Re-capturing the same job's posting adds a new capture; the latest one is current. |
 | R13.11 | `posting.md` is written from the capture: the page's main content converted mechanically to Markdown (headings, lists, paragraphs), with navigation, footers, scripts and cookie banners removed. The wording is never changed. A "Source" section records the URL and capture date, and the existing "My notes" section is kept for the user. |
 | R13.12 | Once written, `posting.md` follows the normal sync rules (section 8.7): the user's edits sync back, and intake never overwrites a `posting.md` the user has changed. |
 
@@ -498,7 +498,7 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 | R13.13 | Intake fills the posting fields of section 8.6: company and department (as names, matched in R13.17), title, posting URL, source, external posting id, location, work arrangement, salary range as posted, date posted and closing date. |
 | R13.14 | **Structured data first.** When the page carries schema.org `JobPosting` data (common on employer and job-board sites), fields are taken from it: `title`, `hiringOrganization`, `jobLocation`, `jobLocationType`, `baseSalary`, `datePosted`, `validThrough`, `identifier`. Otherwise, rules in code recognize common patterns: salary ranges, "Posted on …" dates, "Job ID / Req #" labels, and the source from the URL's domain (`linkedin` for LinkedIn, `job_board` for known boards, otherwise `company_site`). |
 | R13.15 | **Never guess.** A field the posting does not state stays `null`; `work_arrangement` stays `unknown` unless the posting says remote, hybrid or onsite. Every extracted value records the passage of the capture it came from, and the service rejects any value whose passage is not in the capture. This check is in code (section 6.2), so it applies to any agent. |
-| R13.16 | **Site adapters** for sites with a known page or API format (for example applicant tracking systems that many employers share) are an extension point (A4, [ARCHITECTURE.md](ARCHITECTURE.md)): a plugin can register an adapter for a domain that returns the capture and fields. Core ships the generic HTML and structured-data path; adapters must follow R13.5–R13.8. |
+| R13.16 | **Site adapters** for sites with a known page or API format (for example applicant tracking systems that many employers share) are an extension point (A4, [ARCHITECTURE.md](ARCHITECTURE.md)): a plugin can register an adapter for a domain that returns the capture and fields. Core ships the generic HTML and structured-data path; adapters must follow R13.5–R13.8. An adapter may read a site's JSON API (D31); it must then supply the posting as Markdown, and each block of it (heading, paragraph, list item) must keep, word for word and in order, the wording of one string value in the JSON. Blocks may come in any order. Markdown that fails is refused; there is no generic JSON conversion to fall back on. |
 
 #### Company, department and duplicates
 
@@ -660,7 +660,7 @@ The application ships and runs as a Docker image. The image contains only code, 
 
 ## 12. Decisions
 
-All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D30 (job intake, section 8.13) were decided on November 15, 2026.
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D31 (job intake, section 8.13) were decided on November 15, 2026.
 
 | #   | Decision                                                                     | Choice                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -693,6 +693,7 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 | D27 | May the agent trigger a fetch (R13.24)? |  Yes, through `job_intake_propose` with a URL, since the fetch is one GET under R13.5–R13.8 and creates nothing until the owner confirms |
 | D28 | New permission `application:propose` for the agent (R13.22) | Add it to B2 and the agent role in B7 |
 | D29 | Keep every capture of a posting, or only the latest (R13.10)? | Keep all; they are small text and show when a posting changed |
+| D31 | May site adapters read JSON APIs (R13.7, R13.16)? | Yes, only when an adapter asks for JSON. Captures may then be `application/json` (migration 0004). The wording check for JSON is per block: each Markdown block must match one JSON string value, words in order; blocks may come in any order (decided November 15, 2026) |
 | D30 | One command or two for starting a job (R13.1)? | One: `new-job`. Given a link, `--stdin` or `--file` it runs intake; without, it creates the job only. A separate `intake` command was confusing next to `new-job` (decided November 15, 2026) |
 
 ## 13. Milestones

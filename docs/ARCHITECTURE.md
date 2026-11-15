@@ -153,7 +153,7 @@ Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `a
 
 `Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, captured job postings, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()` and `load()`. Rows come back as plain dicts.
 
-`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, and every record carries `created_by/at` and `updated_by/at`.
+`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, and every record carries `created_by/at` and `updated_by/at`.
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 
@@ -242,11 +242,36 @@ def register(ext):
 Core holds an adapter to the same rules as everything else:
 
 - **Fetching:** `fetch` is the App's safe fetcher with the user's limits and the audit (R13.5–R13.8): internal addresses refused on every redirect, timeout and size limit, no cookies. It only fetches from the adapter's own domains, at most `adapters.MAX_FETCHES` (2) times per intake. The page an adapter returns must be one it got from `fetch`.
+- **JSON APIs (D31):** `fetch(url, accept="json")` asks for a JSON API response; only `application/json` (or `application/*+json`) is accepted then, and JSON nested more than 64 levels deep or invalid is refused. For a JSON capture the adapter must return the Markdown, and each block of it (heading, paragraph, list item) must keep the wording of one string value in the JSON, words in order; blocks may come in any order. Markdown that fails is refused, since core has no JSON conversion to fall back on. Passages for fields can be quoted from any string value.
 - **Wording:** Markdown an adapter returns is used only if every word appears in the page, in order (`postingtext.wording_preserved`, R13.11). Otherwise core converts the page itself and says so.
 - **Fields:** every field goes through `posting_fields.verify` (R13.15). One whose passage isn't in the page, or doesn't state the value, is dropped and reported. Adapter fields take precedence over the generic extraction, which still fills the fields the adapter leaves out.
 - **Failures:** an adapter that raises is reported as a failed fetch with the paste fallback, and audited (`posting:adapter`).
 
-These checks keep honest adapters on the rails; an adapter is still code the host chose to install. `tests/test_site_adapters.py` shows an adapter and each check.
+An adapter for a JSON API looks like this:
+
+```python
+import json
+
+
+class ExampleAtsApi:
+    """Reads postings on the fictional jobs.example-ats.com through its JSON API."""
+
+    name = "example-ats-api"
+    domains = ("example-ats.com",)
+
+    def capture(self, url, fetch):
+        board, job = url.rstrip("/").split("/")[-2:]
+        page = fetch(f"https://api.example-ats.com/v1/boards/{board}/jobs/{job}", accept="json")
+        data = json.loads(page.text)
+        # The API's own wording, nothing added. This API's description is plain text; if a value
+        # holds HTML, turn it into Markdown first (tags aren't words of the posting).
+        markdown = f"## {data['title']}\n\n{data['description']}\n"
+        return AdapterCapture(page=page, markdown=markdown, fields=[
+            ExtractedField(name="title", value=data["title"], passage=data["title"]),
+        ])
+```
+
+These checks keep honest adapters on the rails; an adapter is still code the host chose to install. `tests/test_site_adapters.py` shows an adapter and each check, and `tests/test_json_adapters.py` a JSON API adapter.
 
 ## Writing a plugin package
 

@@ -11,6 +11,9 @@ An adapter can't bypass the intake checks:
   fetcher with the user's limits and the audit (R13.5–R13.8, R13.27), restricted to the adapter's
   own domains and to `MAX_FETCHES` requests. The page it returns must be one it got from `fetch`.
 - Markdown it returns must keep the page's wording (R13.11); otherwise core converts the page itself.
+- It may ask for a JSON API response (`fetch(url, accept="json")`, D31). For JSON it must return the
+  posting as Markdown, and each block of it must keep the wording of one string in the JSON;
+  there is no generic conversion to fall back on.
 - Every field it returns goes through the same passage check as any other value (R13.15). A field
   that fails is dropped and reported.
 
@@ -21,7 +24,7 @@ on the rails, they don't sandbox hostile code.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 from urllib.parse import urlsplit
 
 from .fetch import FetchedPage
@@ -29,7 +32,12 @@ from .models import ExtractedField
 
 MAX_FETCHES = 2
 
-Fetch = Callable[[str], FetchedPage]
+
+class Fetch(Protocol):
+    """`fetch(url)` gets a web page (HTML or text); `fetch(url, accept="json")` gets a JSON API response
+    (D31). Either way it's the safe, audited fetcher, limited to the adapter's own domains."""
+
+    def __call__(self, url: str, accept: str = "page") -> FetchedPage: ...
 
 
 @dataclass
