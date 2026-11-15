@@ -28,8 +28,13 @@ def _names(entry) -> list[str]:
     return [entry.name, entry.slug, *entry.aliases]
 
 
-def find_matches(entries, name: str, threshold: float = 0.84) -> list:
-    """Existing entries matching a name or alias, ignoring case, punctuation and Inc/LLC/Corp (R11.4)."""
+SAME_THRESHOLD = 0.84     # this close counts as "the same organization" (R11.4)
+SUGGEST_THRESHOLD = 0.6   # this close is worth offering in a pick list
+
+
+def score_matches(entries, name: str, threshold: float = SAME_THRESHOLD) -> list[tuple[float, object]]:
+    """(score, entry) for existing entries matching a name or alias, best first. Case, punctuation
+    and Inc/LLC/Corp are ignored (R11.4); an exact name or alias match scores 1.0."""
     target = normalize_org_name(name)
     scored = []
     for e in entries:
@@ -38,7 +43,12 @@ def find_matches(entries, name: str, threshold: float = 0.84) -> list:
             best = 1.0
         if best >= threshold:
             scored.append((best, e))
-    return [e for _, e in sorted(scored, key=lambda t: -t[0])]
+    return sorted(scored, key=lambda t: -t[0])
+
+
+def find_matches(entries, name: str, threshold: float = SAME_THRESHOLD) -> list:
+    """Existing entries matching a name or alias, ignoring case, punctuation and Inc/LLC/Corp (R11.4)."""
+    return [e for _, e in score_matches(entries, name, threshold)]
 
 
 class SuggestIn(BaseModel):

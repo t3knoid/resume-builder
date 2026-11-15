@@ -4,6 +4,7 @@ pieces they use.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -194,3 +195,107 @@ def _capture_with_adapter(space: UserSpace, ctx: RequestContext, url: str, adapt
             good.append(f)
     space.audit(ctx, "posting:adapter", target=adapter.name, result="ok")
     return UrlCapture(capture, posting_fields.extract(capture, first=good), adapter=adapter.name, notes=notes)
+
+
+# ---------------------------------------------------------------- registry matching (R13.17)
+
+@dataclass
+class OrgMatch:
+    """How a company or department name from a posting relates to the registry.
+
+    `candidates` are existing entries, best first, each {slug, name, score, exact}. `suggested` is
+    the slug intake offers by default: an existing entry that is the same organization (R11.4), or
+    None when the user must choose. `new_slug` is the slug a new entry would get if the user
+    chooses "add new"; nothing is created here (R11.5).
+    """
+
+    name: str | None
+    candidates: list[dict] = field(default_factory=list)
+    suggested: str | None = None
+    new_slug: str | None = None
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "candidates": self.candidates, "suggested": self.suggested, "new_slug": self.new_slug}
+
+
+def _org_match(entries, name: str | None) -> OrgMatch:
+    from ..slug import is_slug, slugify
+    from .orgs import SAME_THRESHOLD, SUGGEST_THRESHOLD, score_matches
+
+    if not name or not name.strip():
+        return OrgMatch(name=None)
+    scored = score_matches(entries, name, threshold=SUGGEST_THRESHOLD)
+    candidates = [{"slug": e.slug, "name": e.name, "score": round(s, 2), "exact": s == 1.0} for s, e in scored]
+    suggested = candidates[0]["slug"] if candidates and scored[0][0] >= SAME_THRESHOLD else None
+    slug = slugify(name)
+    taken = {e.slug for e in entries}
+    new_slug = slug if is_slug(slug) and slug not in taken else None
+    return OrgMatch(name=name.strip(), candidates=candidates, suggested=suggested, new_slug=new_slug)
+
+
+def match_company(space: UserSpace, name: str | None) -> OrgMatch:
+    """Registry companies matching a company name from a posting, best first (R13.17)."""
+    return _org_match(space.repo.load_registry().companies, name)
+
+
+def match_department(space: UserSpace, company_slug: str | None, name: str | None) -> OrgMatch:
+    """Departments of `company_slug` matching a department name from a posting. With no company
+    (yet), there is nothing to match against: every name is new."""
+    reg = space.repo.load_registry()
+    company = next((c for c in reg.companies if c.slug == company_slug), None) if company_slug else None
+    return _org_match(company.departments if company else [], name)
+
+
+# ---------------------------------------------------------------- duplicate check (R13.18)
+
+TRACKING_PARAMS = {"fbclid", "gclid", "mc_cid", "mc_eid", "trid", "ref", "refid", "referrer", "src", "source", "gh_src",
+                   "lever-origin", "lever-source", "trk", "trkinfo", "trackingid", "tracking_id", "sid", "_hsenc", "_hsmi"}
+
+
+def normalize_posting_url(url: str | None) -> str | None:
+    """A posting link reduced to what identifies the posting: lowercase scheme and host, no
+    "www.", no fragment, no trailing slash, and no tracking parameters (utm_*, ref, trid, ...)."""
+    from urllib.parse import parse_qsl, urlencode
+
+    if not url or not url.strip():
+        return None
+    parts = urlsplit(url.strip())
+    if not parts.scheme or not parts.hostname:
+        return url.strip().lower()
+    host = parts.hostname.lower().removeprefix("www.")
+    if parts.port and parts.port not in (80, 443):
+        host += f":{parts.port}"
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+             if not k.lower().startswith("utm_") and k.lower() not in TRACKING_PARAMS]
+    path = parts.path.rstrip("/") or "/"
+    q = urlencode(sorted(query))
+    return f"{parts.scheme.lower()}://{host}{path}" + (f"?{q}" if q else "")
+
+
+def _norm_external_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    v = str(value).strip().lstrip("#").strip().lower()
+    return v or None
+
+
+def find_duplicates(space: UserSpace, posting_url: str | None, company_slug: str | None,
+                    external_id: str | None) -> list[dict]:
+    """Applications that look like the same posting: the same link (tracking parameters ignored), or
+    the same company and external posting id. Archived applications count too, and say so."""
+    url = normalize_posting_url(posting_url)
+    ext = _norm_external_id(external_id)
+    out = []
+    for row in space.repo.list_application_rows(include_archived=True):
+        data = json.loads(row["data"])
+        reasons = []
+        if url and (normalize_posting_url(data.get("posting_url")) == url or any(
+                normalize_posting_url(c["source_url"]) == url for c in space.repo.list_posting_captures(row["job_id"]))):
+            reasons.append("same posting link")
+        if ext and company_slug and row["company_slug"] == company_slug and _norm_external_id(data.get("external_id")) == ext:
+            reasons.append("same company and posting id")
+        if reasons:
+            out.append({"job_id": row["job_id"], "title": data.get("title"), "stage": row["stage"],
+                        "archived": bool(row["archived"]), "reasons": reasons})
+    out.sort(key=lambda d: (d["archived"], d["job_id"]), reverse=False)
+    return out
