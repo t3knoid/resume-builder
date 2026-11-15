@@ -122,10 +122,19 @@ def check_csrf(app: App, user: str, sid: str, token: str | None) -> None:
 
 # ---------------------------------------------------------------- where a request comes from
 
-def allowed_hosts() -> set[str]:
-    """Local names only, plus any in RB_WEB_HOSTS (comma-separated), for example a custom local name."""
+def allowed_hosts(app: App | None = None) -> set[str]:
+    """The host names the site answers to: the App's own list if it was given one (`web_hosts`),
+    otherwise the local names plus any in RB_WEB_HOSTS (comma-separated, names that resolve to this
+    machine only)."""
+    if app is not None and getattr(app, "web_hosts", None) is not None:
+        return set(app.web_hosts)
     extra = {h.strip().lower() for h in os.environ.get("RB_WEB_HOSTS", "").split(",") if h.strip()}
     return LOCAL_HOSTS | extra
+
+
+def host_allowed(app: App | None, host_header: str | None) -> bool:
+    """True when the Host header names an allowed host (any port). Every request is checked (#31)."""
+    return bool(host_header and host_header.strip()) and _host_name(host_header) in allowed_hosts(app)
 
 
 def _host_name(host_header: str) -> str:
@@ -135,10 +144,10 @@ def _host_name(host_header: str) -> str:
     return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
 
 
-def check_request_origin(request: Request) -> None:
-    """For every website POST: a local Host, and an Origin (or Referer) that is this site."""
+def check_request_origin(request: Request, app: App | None = None) -> None:
+    """For every website POST: an allowed Host, and an Origin (or Referer) that is this site."""
     host = request.headers.get("host", "")
-    if _host_name(host) not in allowed_hosts():
+    if not host_allowed(app, host):
         raise HTTPException(403, "This address isn't allowed. Open the tracker at http://localhost.")
     expected = f"{request.url.scheme}://{host}".lower()
     origin = request.headers.get("origin")

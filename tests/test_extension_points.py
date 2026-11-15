@@ -104,7 +104,7 @@ def no_sqlite(monkeypatch):
 
 def test_plugin_operation_and_router_appear_in_api_and_mcp(sample, owner):
     api = create_app(sample.app, plugins=[FakePlugin()])
-    client = TestClient(api)
+    client = TestClient(api, base_url="http://localhost")
 
     assert client.get("/plugin/ping").json() == {"pong": True, "has_greeting": True}
     assert f"/api/{{user}}/greeting_say" in client.get("/openapi.json").json()["paths"]
@@ -189,7 +189,7 @@ def test_website_template_override_is_used(sample, tmp_path):
     (override / "base.html").write_text(
         "<!doctype html><title>{% block title %}{% endblock %}</title>"
         "<p id='host-banner'>Custom host header</p><main>{% block body %}{% endblock %}</main>", encoding="utf-8")
-    client = TestClient(create_app(sample.app, template_dirs=[override]))
+    client = TestClient(create_app(sample.app, template_dirs=[override]), base_url="http://localhost")
     page = client.get("/")
     assert page.status_code == 200
     assert "Custom host header" in page.text

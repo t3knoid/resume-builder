@@ -39,7 +39,7 @@ class StubFetcher:
 @pytest.fixture
 def client(sample):
     sample.app.fetcher = StubFetcher({URL: (FIXTURES / "typical.html").read_text(encoding="utf-8")})
-    return TestClient(create_api(sample.app))
+    return TestClient(create_api(sample.app), base_url="http://localhost")
 
 
 def new_job_from(sample, owner, **source):

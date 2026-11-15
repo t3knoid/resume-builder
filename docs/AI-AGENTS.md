@@ -25,7 +25,7 @@ Whatever the assistant, it works as the **agent**: it can only propose drafts, a
 | --- | --- | --- |
 | **MCP tools** (recommended) | Claude Code, Claude Desktop, Gemini CLI, Codex CLI, GitHub Copilot in VS Code, Copilot CLI, Cursor and other MCP clients | The assistant calls resume-builder directly: reads the brief, saves drafts, sees problems and fixes them itself. |
 | **Copy and paste** | Any chat assistant: claude.ai, gemini.google.com, chatgpt.com, Microsoft Copilot | You paste a brief in; the assistant replies with blocks; you pipe each block into `rb propose`. |
-| **HTTP API** | Your own scripts | `POST http://localhost:8000/api/<you>/<operation>` with an agent token. |
+| **HTTP API** | Your own scripts | `POST http://localhost:8000/api/<you>/<operation>` with an agent token. Use `localhost` or `127.0.0.1`: other host names are refused. |
 
 **MCP** (Model Context Protocol) is a standard way for AI tools to use local tools. resume-builder includes an MCP server, `rb mcp`. Your assistant starts it on demand through Docker; there's nothing extra to install.
 

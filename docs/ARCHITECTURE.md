@@ -92,6 +92,7 @@ api = create_app(
     file_store_factory=my_files,         # (app, user_id, area) -> FileStore
     secrets=my_secret_store,             # SecretStore
     change_listeners=[],                 # no YAML write-back (for example, no user files)
+    web_hosts=["tracker.example.com"],   # host names the website and API answer to
     fetcher=my_fetcher,                  # PostingFetcher for job intake (for example, through a proxy)
     tenant_id="local",                   # the tenant this App serves
 )
@@ -107,6 +108,7 @@ api = create_app(
 | `file_store_factory` | `(app, user_id, area) -> FileStore`, `area` is `output` or `backups` | `filestore.local_file_store` |
 | `secrets` | A `SecretStore` | `secretstore.EnvSecretStore` |
 | `change_listeners` | Callables `(space, Change) -> bool` | `[sync_ops.write_back]` |
+| `web_hosts` | Host names the website and API answer to. Every request with another `Host` is refused before any route runs (against DNS rebinding, PRD R8.9). Given a list, only those names work | `localhost`, `127.0.0.1`, `::1`, plus `RB_WEB_HOSTS` |
 | `fetcher` | A `fetch.PostingFetcher`: `fetch(url, limits) -> FetchedPage`, for job intake (PRD 8.13). A replacement must keep R13.5–R13.8: one GET, no cookies or user data, internal addresses refused on every redirect, timeout and size limit | `fetch.HttpPostingFetcher` |
 | `policy` | A `Policy` | the process-wide `RolePolicy` |
 | `tenant_id` | The tenant of the user spaces this App serves | `"local"` |

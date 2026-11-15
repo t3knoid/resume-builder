@@ -9,7 +9,7 @@ from .conftest import JOB, USER
 
 
 def _client(sample):
-    return TestClient(create_api(sample.app))
+    return TestClient(create_api(sample.app), base_url="http://localhost")
 
 
 def test_every_operation_has_a_route(sample):

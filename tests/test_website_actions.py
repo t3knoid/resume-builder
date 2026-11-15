@@ -115,7 +115,7 @@ def test_sign_in_needs_a_local_host_and_the_sites_origin(sample, owner, client):
     code = invoke(sample.app, owner, "web_login_link", {})["code"]
     assert post(client, f"/u/{USER}/login", {"code": code}, origin="http://evil.example").status_code == 403
     evil = TestClient(create_api(sample.app), base_url="http://evil.example", follow_redirects=False)
-    assert post(evil, f"/u/{USER}/login", {"code": code}, origin="http://evil.example").status_code == 403
+    assert post(evil, f"/u/{USER}/login", {"code": code}, origin="http://evil.example").status_code == 400  # refused before any route (#31)
     assert post(client, f"/u/{USER}/login", {"code": code}).status_code == 303          # the code wasn't used up
 
 
@@ -211,7 +211,7 @@ def test_forged_requests_are_refused(sample, owner, agent, client, case):
         r = post(client, path, data, origin=None)
     else:
         r = client.post(path, data=data, headers={"origin": "http://evil.example", "host": "evil.example"})
-    assert r.status_code == 403
+    assert r.status_code == (400 if case == "foreign-host" else 403)   # a foreign Host is refused before any route (#31)
     assert sample.repo.get_intake_proposal(pid)["status"] == "pending"
 
 

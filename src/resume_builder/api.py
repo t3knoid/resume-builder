@@ -69,6 +69,18 @@ def create_api(app: App, routers: tuple | list = ()) -> FastAPI:
 
     api.state.rb_app = app  # routers reach the App through request.app.state.rb_app
 
+    @api.middleware("http")
+    async def _host_check(request: Request, call_next):
+        """Every request, before any route: the Host must be one this app answers to (issue #31).
+        A page that rebinds its own name to 127.0.0.1 can't read the tracker through the user's browser."""
+        from .web.session import host_allowed
+
+        if not host_allowed(app, request.headers.get("host")):
+            return PlainTextResponse(
+                "This address isn't allowed. Open the tracker at http://localhost (with your port), or add the "
+                "name to RB_WEB_HOSTS if it points to this computer.", status_code=400)
+        return await call_next(request)
+
     for op in sorted(app.registry.values(), key=lambda o: o.name):
         api.add_api_route(
             f"/api/{{user}}/{op.name}", _endpoint(app, op), methods=["POST"], name=op.name,
@@ -135,7 +147,7 @@ def _website(api: FastAPI, app: App) -> None:
     async def owner_form(request: Request, user: str):
         """Every state-changing website request: local Host, same origin, signed in, valid CSRF token."""
         _check_user(app, user)
-        websession.check_request_origin(request)
+        websession.check_request_origin(request, app)
         form = await request.form()
         sid = await run_in_threadpool(signed_in, request, user)
         if not sid:
@@ -227,7 +239,7 @@ def _website(api: FastAPI, app: App) -> None:
     @api.post("/u/{user}/login", include_in_schema=False)
     async def login(request: Request, user: str):
         _check_user(app, user)
-        websession.check_request_origin(request)
+        websession.check_request_origin(request, app)
         form = await request.form()
         code, token = (form.get("code") or "").strip(), (form.get("token") or "").strip()
 

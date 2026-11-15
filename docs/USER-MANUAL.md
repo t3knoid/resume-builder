@@ -58,6 +58,7 @@ Copy `.env.example` to `.env` and edit it. `.env` is never committed.
 | `RB_HOST_OUTPUT`   | Where exported PDFs go.                                                            | `./output`  |
 | `RB_HOST_BACKUPS`  | Where database backups go.                                                         | `./backups` |
 | `RB_HOST_PORT`     | Port for the website on your computer.                                             | 8000          |
+| `RB_WEB_HOSTS`     | Extra names the website answers to, comma-separated, for example a name you gave this computer. Only names that point to this computer. | none (`localhost`, `127.0.0.1` and `::1` always work) |
 
 The names `RB_CONTACT_EMAIL` and `RB_CONTACT_PHONE` are set in your `user.yaml` (`contact.email_secret`, `contact.phone_secret`). You can instead use Docker secrets with those names (files in `/run/secrets/`). Secret names may contain only letters, digits, `_`, `.` and `-`.
 
@@ -780,6 +781,7 @@ An MCP or API agent can also **propose a new job**: give it the posting's link a
 - YAML is read with strict safety limits, so a malformed or malicious file can't run code or exhaust memory.
 - Every change is in the audit log with who made it (you, the agent, or the system) and how (file sync, command, API).
 - Tokens protect against mistakes and keep the agent within its role. They aren't protection against someone who already controls your computer or Docker.
+- The website and API answer only when you open them as `localhost` or `127.0.0.1` (or a name in `RB_WEB_HOSTS`). That stops another website you visit from reading your tracker through your browser by pretending to be on your computer.
 - Signing in to the website gives your browser a session cookie that only works on your computer, can't be read by page scripts, and ends after 12 hours idle or 7 days. Its buttons only work from the tracker's own pages: a form on another website can't use them.
 - Job ids contain employer names. If you keep your folder in git, keep that repository private.
 
@@ -795,6 +797,7 @@ An MCP or API agent can also **propose a new job**: give it the posting's link a
 | "can't move from X to Y"                          | Stages only move forward; see section 7. Use a `correction` event for mistakes.                                       |
 | Contact details missing from PDFs                 | Set `RB_CONTACT_EMAIL`/`RB_CONTACT_PHONE` in `.env`, then `docker compose up -d`.                               |
 | "That token isn't valid"                          | It was replaced. Issue a new one: `rb token --actor agent`.                                                           |
+| "This address isn't allowed" in the browser       | Open the tracker as `http://localhost:8000` (or your `RB_HOST_PORT`). To use another name for this computer, add it to `RB_WEB_HOSTS` in `.env`, then `docker compose up -d`. |
 | A job folder disappeared                          | Nothing was deleted: `rb export-files`.                                                                               |
 | `rb new-job <url>` says the page needs a sign-in or JavaScript, or has too little text | Copy the posting from your browser into `intake/<name>.txt`, then `rb new-job --file intake/<name>.txt <link>`. |
 | `rb new-job <url>` says "already tracking this posting" | Use `--recapture <job-id>` to update that job's posting, or `--allow-duplicate` for a separate job.                    |
