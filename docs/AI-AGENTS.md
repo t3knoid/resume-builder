@@ -46,7 +46,7 @@ Everything the agent does is in the audit log (`rb audit`), marked `agent`, with
 ## 2. Before you start
 
 1. resume-builder is installed and has run at least once (`docker compose up -d --build`; see the [quick start](QUICKSTART.md)). Building first matters: an MCP client can't wait for a build.
-2. You've added a job (`rb new-job`), pasted its posting into `posting.md`, and written your `interest_notes` in its `application.yaml`.
+2. You've added a job with its posting (`rb new-job <link to the posting>`, or `rb new-job` and then pasting the posting into `posting.md`), and written your `interest_notes` in its `application.yaml`.
 3. Some content in `base.yaml` is `confirmed`. The agent can only use confirmed items.
 
 ### The MCP command
@@ -391,7 +391,7 @@ back as HTTP 422 with a `problems` list.
 
 ## 8. A typical session
 
-1. **You:** `rb new-job --title "Platform Engineer"`, paste the posting into `posting.md`, write
+1. **You:** `rb new-job <link to the posting>` (it reads the posting and fills in the job), then write
    `interest_notes`.
 2. **Agent:** reads the brief: rules, posting, your interest notes, and every confirmed bullet with
    its id, tags, metric and limits.

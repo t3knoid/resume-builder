@@ -59,10 +59,12 @@ The PDF lands in `output/<your-name>/public/`.
 ## 4. Add a job
 
 ```sh
-rb new-job --title "Platform Engineer"
+rb new-job https://careers.example.com/jobs/1234
 ```
 
-It asks for the company and department, suggesting ones you've used before, and creates `data/<your-name>/jobs/<job-id>/`. Paste the job description into `posting.md` there. In `application.yaml`, write why you want the job under `interest_notes`.
+It reads the posting from the link, shows what it found (title, location, salary, dates and so on) and the company it matched, and asks once before creating `data/<your-name>/jobs/<job-id>/` with `posting.md` and `application.yaml` filled in. If the site needs a sign-in, copy the posting into a file and run `rb new-job --stdin <link> < posting.txt` instead. In `application.yaml`, write why you want the job under `interest_notes`.
+
+No link? `rb new-job --title "Platform Engineer"` (without a link) asks for the company and creates the folder; paste the job description into `posting.md` yourself.
 
 ## 5. Tailor it
 

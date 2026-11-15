@@ -315,6 +315,14 @@ class SqliteStorage:
         return _all(self.conn.execute(
             f"SELECT {self._CAPTURE_LIST_COLUMNS} FROM posting_captures WHERE job_id = ? ORDER BY captured_at, id", (job_id,)))
 
+    def unattached_posting_capture(self, content_hash: str, source_kind: str, source_url: str | None,
+                                   source_path: str | None) -> PostingCapture | None:
+        row = _one(self.conn.execute(
+            "SELECT * FROM posting_captures WHERE job_id IS NULL AND content_hash = ? AND source_kind = ? "
+            "AND source_url IS ? AND source_path IS ? ORDER BY id DESC LIMIT 1",
+            (content_hash, source_kind, source_url, source_path)))
+        return PostingCapture.model_validate(row) if row else None
+
     def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
         row = _one(self.conn.execute("SELECT job_id FROM posting_captures WHERE id = ?", (capture_id,)))
         if row is None:

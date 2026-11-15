@@ -145,7 +145,7 @@ def new_job(app, owner) -> str:
 def test_capture_of_an_unusable_page_fails_with_the_paste_fallback():
     with pytest.raises(FetchFailed) as e:
         capture_from_page(fetched("login.html"))
-    assert e.value.reason == "login-page" and "rb intake --file" in str(e.value)
+    assert e.value.reason == "login-page" and "rb new-job --stdin" in str(e.value)
 
 
 def test_capture_on_a_new_job_writes_posting_md(sample, owner, roots):

@@ -30,8 +30,8 @@ from .errors import AppError
 USER_AGENT = f"resume-builder/{__version__} (job posting intake; one request per user action)"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 CONTENT_TYPES = {"text/html": "text/html", "application/xhtml+xml": "text/html", "text/plain": "text/plain"}
-PASTE_FALLBACK = ("Instead, copy the posting text from your browser, save it in your data folder as "
-                  "intake/<name>.txt, and run: rb intake --file intake/<name>.txt")
+PASTE_FALLBACK = ("Instead, copy the posting text from your browser into a file and run: "
+                  "rb new-job --stdin <link> < posting.txt")
 
 
 class FetchFailed(AppError):

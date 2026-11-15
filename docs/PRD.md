@@ -450,9 +450,10 @@ Starting a job today means running `new-job`, then copying the posting into `pos
 #### User flow
 
 ```text
-rb intake <url>                       # default: fetch the page
-rb intake --file intake/<name>.txt    # fallback: text the user saved in their intake folder
-rb intake --stdin < posting.txt       # fallback: piped text
+rb new-job <url>                       # default: fetch the page
+rb new-job --file intake/<name>.txt    # fallback: text the user saved in their intake folder
+rb new-job --stdin [<url>] < posting.txt  # fallback: piped text
+rb new-job                             # no posting: create the job only (R10.9), as before
         │
         ▼
 capture  →  extract fields  →  match company/department  →  check for duplicates  →  preview
@@ -465,7 +466,7 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 
 | Id | Requirement |
 | --- | --- |
-| R13.1 | **URL is the default input.** `intake <url>` fetches the page and uses it as the posting. The URL is stored as `posting_url`. |
+| R13.1 | **URL is the default input.** On the CLI, intake is `new-job` given a posting: `new-job <url>` (or `--url <url>`) fetches the page and uses it as the posting. The URL is stored as `posting_url`. Without a link, `--stdin` or `--file`, `new-job` creates the job only, as in R10.9 (D30). |
 | R13.2 | **Pasted text is the fallback**, for pages that need a login (for example LinkedIn), render only with JavaScript, block automated requests, or for postings received by email. The user saves the text to a file in their intake folder (`/data/<user>/intake/`) or pipes it on stdin. A URL found in the text is used as `posting_url`; otherwise the user may pass `--url`. |
 | R13.3 | When a fetch fails or returns too little posting text (for example an empty JavaScript shell or a login page), intake stops, says why in plain words, and shows the exact paste-fallback command. It never creates a job from a page it couldn't read. |
 | R13.4 | The intake folder is seeded by bootstrap with a short `README.md` explaining its use. Files in it are read only by the sync adapter (A1), only when the user runs intake on them, and never deleted or moved by the app. After a successful intake, `SYNC-STATUS.md` notes that the file has been taken in and can be deleted. |
@@ -508,7 +509,7 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 
 | Id | Requirement |
 | --- | --- |
-| R13.19 | Intake shows a **preview** before creating anything: each field with its value and source passage, the matched company and department, the job id it would create (R1.3), and any duplicate. On the CLI the user confirms, edits a field, or picks another registry entry; `--yes` accepts the preview as shown. |
+| R13.19 | Intake shows a **preview** before creating anything: each field with its value and source passage, the matched company and department, the job id it would create (R1.3), and any duplicate. On the CLI the user confirms, edits a field, or picks another registry entry; `--yes` accepts the preview as shown. `new-job`'s own `--title` and `--source` count as the user's values. |
 | R13.20 | On confirmation, intake creates the application exactly as `new-job` does (R10.9: stage `interested`, today's date), with the extracted fields filled in, then writes `posting.md` and `application.yaml` through write-back. The whole intake is applied in one transaction: all or nothing. |
 | R13.21 | After intake, the CLI prints the next steps: add `interest_notes`, then ask the agent for a profile and fit report (or run `brief`). |
 
@@ -524,8 +525,8 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 
 | Id | Requirement |
 | --- | --- |
-| R13.25 | Intake is defined once as service operations (A5) and appears in the CLI, HTTP API and MCP together: `job_intake_preview` (owner, read-only: capture and extract, create nothing), `job_intake` (owner, `application:write`), `job_intake_propose` (agent, `application:propose`), `job_intake_confirm` and `job_intake_discard` (owner, `application:write`). Each declares its permission and has permission tests (B9). |
-| R13.26 | `new-job` keeps working unchanged for users who prefer to type the fields. |
+| R13.25 | Intake is defined once as service operations (A5) and appears in the CLI, HTTP API and MCP together: `job_intake_preview` (owner, `application:write`: captures and extracts; it stores the capture, unattached, so confirming never fetches again, and creates nothing else), `job_intake` (owner, `application:write`), `job_intake_propose` (agent, `application:propose`), `job_intake_confirm` and `job_intake_discard` (owner, `application:write`). Each declares its permission and has permission tests (B9). |
+| R13.26 | `new-job` without a posting keeps working unchanged for users who prefer to type the fields. |
 | R13.27 | Each fetch is recorded in the audit log with the URL's host (not the full URL or the content), the result and the actor. |
 
 #### Privacy
@@ -537,8 +538,8 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 
 #### Acceptance
 
-- `intake <url>` on a page with schema.org `JobPosting` data produces a preview with every stated field filled and nothing invented; confirming creates the job, `posting.md` and `application.yaml` in one step.
-- `intake --file` on text pasted from a login-only site produces the same result, minus anything the text doesn't state.
+- `new-job <url>` on a page with schema.org `JobPosting` data produces a preview with every stated field filled and nothing invented; confirming creates the job, `posting.md` and `application.yaml` in one step.
+- `new-job --file` or `--stdin` on text pasted from a login-only site produces the same result, minus anything the text doesn't state.
 - A JavaScript-only page, a login page, a private address, an oversize response and a redirect loop each stop with a clear message and create nothing.
 - An agent proposal with a value not found in the capture is rejected; a valid one waits for the owner and creates nothing until confirmed.
 - Running intake twice on the same URL offers a re-capture instead of a duplicate job.
@@ -657,7 +658,7 @@ The application ships and runs as a Docker image. The image contains only code, 
 
 ## 12. Decisions
 
-All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D29 (job intake, section 8.13) were decided on November 15, 2026.
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D30 (job intake, section 8.13) were decided on November 15, 2026.
 
 | #   | Decision                                                                     | Choice                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -690,6 +691,7 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 | D27 | May the agent trigger a fetch (R13.24)? |  Yes, through `job_intake_propose` with a URL, since the fetch is one GET under R13.5–R13.8 and creates nothing until the owner confirms |
 | D28 | New permission `application:propose` for the agent (R13.22) | Add it to B2 and the agent role in B7 |
 | D29 | Keep every capture of a posting, or only the latest (R13.10)? | Keep all; they are small text and show when a posting changed |
+| D30 | One command or two for starting a job (R13.1)? | One: `new-job`. Given a link, `--stdin` or `--file` it runs intake; without, it creates the job only. A separate `intake` command was confusing next to `new-job` (decided November 15, 2026) |
 
 ## 13. Milestones
 

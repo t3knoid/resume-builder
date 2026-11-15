@@ -155,7 +155,10 @@ The app runs in Docker with four mounts (PRD section 11):
 
 (`rb` = `docker compose run --rm app rb`.)
 
-1. `rb new-job` (picks or adds company/department; builds the job id; seeds `posting.md` and `application.yaml`). The user pastes the posting; sync picks it up.
+1. `rb new-job` starts every job (picks or adds company/department, builds the job id, creates the application at stage `interested` and the job folder). What else it does depends on what it's given:
+   - **The posting's link:** `rb new-job <url>`. Also fetches the posting once, previews the fields read from it, and writes them to `application.yaml` and the posting to `posting.md` after one confirmation.
+   - **The site needs a sign-in:** copy the posting text to a file, then `rb new-job --stdin <url> < posting.txt`. Same as above, from the pasted text.
+   - **No link at all:** `rb new-job`. Seeds `posting.md` and `application.yaml`; the user pastes the posting into `posting.md` and sync picks it up.
 2. As the agent: use the resume-builder MCP tools if connected (`agent_brief`, then `profile_write` and `document_propose` with kind `fit_report`). Otherwise `rb brief <job-id>` and submit drafts with `rb propose <job-id> profile|fit_report|...` (stdin). Never edit files in the user's data folder directly: that bypasses the agent's checks.
 3. Fix any validation failures reported by sync or the API.
 4. `rb render <job-id>` (add `--preview` while drafts remain, `--ats` for the plain variant). The snapshot id is the resume version id.

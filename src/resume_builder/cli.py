@@ -91,6 +91,145 @@ def _new_job_interactive(app: App, ctx: RequestContext, args) -> dict:
                                         "posting_url": args.url, "source": args.source, "create_missing": create})
 
 
+INTAKE_FIELDS = ("title", "company", "department", "location", "work_arrangement", "salary_range", "date_posted",
+                 "closing_date", "external_id", "posting_url", "source")
+ORIGIN_LABEL = {"structured": "page data", "rule": "posting text", "adapter": "site adapter", "agent": "agent", "you": "you"}
+
+
+def _intake(app: App, ctx: RequestContext, args) -> int:
+    """`rb new-job <url>` or `rb new-job --stdin`: preview, then (after one review) create the job
+    (PRD R13.19–R13.21)."""
+    text = sys.stdin.read().lstrip("﻿") if args.stdin else None
+    if args.stdin and not (text or "").strip():
+        raise AppError("Nothing came in on stdin. Pipe the posting text: rb new-job --stdin [url] < posting.txt")
+    overrides = {}
+    for item in args.set:
+        name, sep, value = item.partition("=")
+        if not sep or name.strip() not in INTAKE_FIELDS:
+            raise AppError(f"--set needs FIELD=VALUE with FIELD one of: {', '.join(INTAKE_FIELDS)}.")
+        overrides[name.strip()] = value.strip() or None
+    for name in ("title", "source"):  # new-job's own options are your values too
+        if getattr(args, name):
+            overrides.setdefault(name, getattr(args, name))
+
+    preview = invoke(app, ctx, "job_intake_preview", {"url": args.url, "text": text})
+    _show_preview(preview, overrides)
+    interactive = not args.yes and not args.stdin and sys.stdin.isatty()
+    payload = {"capture_id": preview["capture_id"], "fields": preview["fields"], "overrides": overrides,
+               "company": args.company, "department": args.department, "create_missing": args.create,
+               "recapture": args.recapture, "replace_posting": args.replace, "allow_duplicate": args.allow_duplicate}
+
+    dups = preview["duplicates"]
+    if dups and not args.recapture and not args.allow_duplicate:
+        first = dups[0]["job_id"]
+        if not interactive:
+            print(f"\nYou're already tracking this posting as {first}. Run again with --recapture {first} to save this "
+                  "posting for that job, or --allow-duplicate to start a new one.")
+            return 1
+        if _ask(f"Save this posting for {first} instead of starting a new job? [Y/n] ", default=True):
+            payload["recapture"] = first
+        elif not _ask("Start a separate new job anyway? [y/N] ", default=False):
+            print("Nothing was created.")
+            return 1
+        else:
+            payload["allow_duplicate"] = True
+
+    if not payload["recapture"]:
+        company = preview["company"]
+        if not args.company and not company["suggested"]:
+            if not interactive:
+                found = f" The posting names `{company['name']}`." if company["name"] else ""
+                print(f"\nWhich company is this job at?{found} Run again with --company <slug or name> "
+                      "(add --create to add a new one to your registry).")
+                return 1
+            choice = _pick("Which company is this job at?", company["candidates"]) if company["candidates"] else None
+            if choice:
+                payload["company"] = choice
+            else:
+                name = company["name"] or input("Company name (as the posting shows it): ").strip()
+                if not name or not _ask(f"Add '{name}' to your registry? [Y/n] ", default=True):
+                    print("Nothing was created.")
+                    return 1
+                payload["company"], payload["create_missing"] = name, True
+        dept = preview["department"]
+        if interactive and not args.department and dept["name"] and not dept["suggested"]:
+            if _ask(f"The posting names the department '{dept['name']}'. Add it to your registry? [y/N] ", default=False):
+                payload["department"], payload["create_missing"] = dept["name"], True
+        if interactive:
+            while True:
+                ans = input("\nCreate this job? [Y/n], or type a field name to change it: ").strip().lower()
+                if ans in ("", "y", "yes"):
+                    break
+                if ans in ("n", "no", "q"):
+                    print("Nothing was created. The captured posting is kept; run the same command again to use it.")
+                    return 1
+                if ans in INTAKE_FIELDS and ans not in ("company", "department"):
+                    overrides[ans] = input(f"{ans} (empty to clear): ").strip() or None
+                    _show_preview(preview, overrides, fields_only=True)
+                else:
+                    print(f"Type one of: {', '.join(f for f in INTAKE_FIELDS if f not in ('company', 'department'))}"
+                          " (use --company/--department for those).")
+        elif not args.yes:
+            print("\nReview the preview, then run the same command with --yes to create the job "
+                  "(add --set FIELD=VALUE to change a value).")
+            return 0
+
+    result = invoke(app, ctx, "job_intake", payload)
+    if result.get("recaptured"):
+        print(f"\nSaved the posting for {result['job_id']}.")
+        if result.get("note"):
+            print(result["note"])
+        return 0
+    print(f"\nCreated {result['job_id']} in {result['folder']}")
+    for kind, slug in result["created"].items():
+        print(f"  Added {kind} `{slug}` to organizations.yaml.")
+    if result.get("note"):
+        print(f"  Note: {result['note']}")
+    print("Next:")
+    for step in result["next"]:
+        print(f"  - {step}")
+    return 0
+
+
+def _ask(prompt: str, default: bool) -> bool:
+    ans = input(prompt).strip().lower()
+    return default if not ans else ans in ("y", "yes")
+
+
+def _show_preview(preview: dict, overrides: dict, fields_only: bool = False) -> None:
+    rows = {f["name"]: (f["value"], ORIGIN_LABEL.get(f["origin"], f["origin"])) for f in preview["fields"]}
+    for name, value in overrides.items():
+        rows[name] = (value, "you") if value else ("", "you: cleared")
+    if not fields_only:
+        print(f"Posting: {preview['source']}" + (f"  (read by site adapter `{preview['adapter']}`)" if preview["adapter"] else ""))
+        if preview["job_id"]:
+            print(f"Job id:  {preview['job_id']}")
+    print()
+    for name in INTAKE_FIELDS:
+        if name in ("company", "department"):
+            continue
+        if name in rows and rows[name][0]:
+            value, origin = rows[name]
+            print(f"  {name:17} {value}  [{origin}]")
+    missing = [n for n in INTAKE_FIELDS if n not in ("company", "department") and not (n in rows and rows[n][0])]
+    if missing:
+        print(f"  Not stated in the posting: {', '.join(missing)}")
+    if fields_only:
+        return
+    for label, key in (("company", "company"), ("department", "department")):
+        m = preview[key]
+        if m["suggested"]:
+            cand = next(c for c in m["candidates"] if c["slug"] == m["suggested"])
+            print(f"  {label:17} {cand['name']} -> `{m['suggested']}` (in your registry)")
+        elif m["name"]:
+            near = ", ".join(f"`{c['slug']}`" for c in m["candidates"])
+            print(f"  {label:17} {m['name']} (not in your registry" + (f"; similar: {near})" if near else ")"))
+    for line in preview["disagreements"] + preview["notes"]:
+        print(f"  Note: {line}")
+    for d in preview["duplicates"]:
+        print(f"  Already tracking: {d['job_id']} ({', '.join(d['reasons'])}" + (", archived)" if d["archived"] else ")"))
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="rb", description="resume-builder: honest tailored resumes and an application tracker.")
     p.add_argument("--user", help="user folder name (default: RB_DEFAULT_USER)")
@@ -116,13 +255,24 @@ def build_parser() -> argparse.ArgumentParser:
     cmd("status", "Sync status, problems, example entries left, limits.")
     cmd("export-files", "Recreate missing working-copy files from the database.")
 
-    n = cmd("new-job", "Start tracking a job (asks for company and department if not given).")
-    n.add_argument("--company")
-    n.add_argument("--department")
-    n.add_argument("--title")
-    n.add_argument("--url")
-    n.add_argument("--source", choices=["linkedin", "referral", "company_site", "recruiter", "job_board", "other"])
-    n.add_argument("--create", action="store_true", help="add the company/department if no match")
+    n = cmd("new-job", "Start tracking a job. With the posting's link (or --stdin and its text), the job is filled in "
+                       "from the posting and you review it once; without, it asks for the company and department.")
+    n.add_argument("link", nargs="?", metavar="url",
+                   help="the posting's link: fetched once and read (same as --url); with --stdin, only recorded as its link")
+    n.add_argument("--url", help="the posting's link (same as the positional url)")
+    n.add_argument("--stdin", action="store_true", help="read the posting text from stdin instead of fetching the link")
+    n.add_argument("--company", help="company slug or name (with a posting: default is the match suggested from it)")
+    n.add_argument("--department", help="department slug or name")
+    n.add_argument("--title", help="job title (with a posting: replaces the one read from it)")
+    n.add_argument("--source", choices=["linkedin", "referral", "company_site", "recruiter", "job_board", "other"],
+                   help="where you found it (with a posting: replaces the one read from the link)")
+    n.add_argument("--create", action="store_true", help="add the company/department to the registry if none matches")
+    n.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE",
+                   help="with a posting: your own value for a field, e.g. --set work_arrangement=hybrid (empty clears it)")
+    n.add_argument("--recapture", metavar="JOB_ID", help="with a posting: save it for an existing job instead of creating one")
+    n.add_argument("--replace", action="store_true", help="with --recapture: replace posting text you pasted or edited")
+    n.add_argument("--allow-duplicate", action="store_true", help="with a posting: create a new job even if one looks like the same posting")
+    n.add_argument("--yes", "-y", action="store_true", help="with a posting: accept the preview without asking")
     ls = cmd("list", "List applications.")
     ls.add_argument("--stage")
     ls.add_argument("--company")
@@ -310,6 +460,11 @@ def _run(app: App, args) -> int | None:
     elif c == "export-files":
         _print(op("export_files"))
     elif c == "new-job":
+        if args.link and args.url and args.link != args.url:
+            raise AppError("Give the posting's link once: either `rb new-job <url>` or `--url <url>`.")
+        args.url = args.link or args.url
+        if args.url or args.stdin:  # a posting to read: job intake (PRD 8.13)
+            return _intake(app, ctx, args)
         _print(_new_job_interactive(app, ctx, args))
     elif c == "list":
         rows = op("job_list", {"stage": args.stage, "company": args.company, "include_archived": args.all})

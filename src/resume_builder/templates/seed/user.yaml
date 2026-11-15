@@ -43,7 +43,7 @@ snapshots:                             # Saved copies of documents, so any of th
 backups:
   keep: 30                             # How many database backups of each kind (before-change, daily) to keep.
 
-intake:                                # Starting a job from its posting link (rb intake <url>).
+intake:                                # Starting a job from its posting link (rb new-job <url>).
   fetch: true                          # false = never fetch links; paste the posting text instead.
   timeout_seconds: 20                  # Give up on a site that takes longer than this (1-120).
   max_bytes: 2000000                   # Refuse pages bigger than this (about 2 MB).

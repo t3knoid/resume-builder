@@ -79,6 +79,10 @@ class Storage(Protocol):
     def list_posting_captures(self, job_id: str) -> list[Row]:
         """Oldest first, without the content: id, source, content type, hash and times."""
         ...
+    def unattached_posting_capture(self, content_hash: str, source_kind: str, source_url: str | None,
+                                   source_path: str | None) -> PostingCapture | None:
+        """The latest capture with this content and source that no job uses yet (a repeated preview)."""
+        ...
     def attach_posting_capture(self, capture_id: int, job_id: str) -> None:
         """Link a capture that has no job yet to a job. Allowed once; a capture is never moved."""
         ...

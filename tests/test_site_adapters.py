@@ -184,6 +184,6 @@ def test_a_failing_adapter_is_reported_and_audited(space_for, owner):
     space = space_for(ExampleAts(explode=True))
     with pytest.raises(FetchFailed) as e:
         capture_url(space, owner, ATS_URL)
-    assert e.value.reason == "adapter-error" and "rb intake --file" in str(e.value)
+    assert e.value.reason == "adapter-error" and "rb new-job --stdin" in str(e.value)
     entry = next(x for x in space.repo.audit_entries() if x["operation"] == "posting:adapter")
     assert entry["result"] == "failed: RuntimeError"

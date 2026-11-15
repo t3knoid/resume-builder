@@ -414,12 +414,56 @@ To confirm everything at once, run `rb confirm --all`. It lists every draft bull
 
 ### Starting
 
+One command starts every job: `rb new-job`. Give it the posting's link and it reads the posting for you:
+
+```sh
+rb new-job https://careers.example.com/jobs/1234
+```
+
+It fetches the page once, keeps a copy of the posting exactly as published, and fills in what the posting states: title, link, source, posting id, location, remote/hybrid/onsite, salary range as posted, date posted and closing date. It shows you a preview first:
+
+- each value, and where it came from (the page's own job data, the posting text, or you);
+- the company and department, matched against your registry (section 6);
+- what the posting doesn't state (left empty, never guessed);
+- anything to check, for example a date that the page's data and its text give differently;
+- any job you're already tracking with the same link or posting id.
+
+Then it asks once: press Enter to create the job, or type a field name to change that value first. If the company isn't in your registry, it offers the closest matches or to add it. Nothing is created until you confirm.
+
+The job gets `application.yaml` with those fields, and `posting.md` with the posting, a **Source** line (link and date captured) and a **My notes** section for you. `interest_notes` is never filled in; that's yours to write.
+
+Options (`rb new-job --help`):
+
+```sh
+rb new-job <url> --company northwind-labs --department platform-engineering   # choose them up front
+rb new-job <url> --company "Fabrikam" --create                                  # add a new company
+rb new-job <url> --title "Platform Engineer II"                                 # your own title instead of the posting's
+rb new-job <url> --set work_arrangement=hybrid --set salary_range=              # your own value; empty clears one
+rb new-job <url> --yes                                                          # accept the preview without asking
+```
+
+`--url <url>` works the same as giving the link on its own.
+
+**When the link can't be read.** Some sites need you to sign in (LinkedIn, for example) or show their postings only with JavaScript. `rb new-job` then stops, says why, and creates nothing. Copy the posting text from your browser into a text file and pipe it in, with the link if you have it:
+
+```sh
+rb new-job --stdin https://www.linkedin.com/jobs/view/123 < posting.txt
+```
+
+Piped input can't also answer questions, so this shows the preview; run the same command with `--yes` (and `--company` if needed) to create the job.
+
+**Already tracking it?** If a job has the same link (tracking parameters ignored) or the same company and posting id, `rb new-job` says so. In a terminal it offers to save the new copy of the posting for that job instead (`--recapture <job-id>`); `--allow-duplicate` starts a separate job anyway. Re-capturing replaces the posting part of `posting.md` and keeps your notes. If you pasted or edited the posting text yourself, it's left alone unless you add `--replace`.
+
+**No link and no text?** Without a link or `--stdin`, `rb new-job` just creates the job: it asks for the company and department and seeds the folder. Paste the posting into `posting.md` and fill in `application.yaml` yourself.
+
 ```sh
 rb new-job --title "Platform Engineer"            # asks for company and department
 rb new-job --company "Acme Corp" --department "Platform" --title "SRE" --create
 ```
 
-The job id is built for you: **date entered + company + department**, for example `2026-11-13-acme-corp-platform`. It never changes. Paste the posting into `posting.md`.
+Settings in `user.yaml` under `intake`: `fetch: false` turns fetching off (paste only), and `timeout_seconds` and `max_bytes` limit how long and how much it reads.
+
+The job id is built for you: **date entered + company + department**, for example `2026-11-13-acme-corp-platform`. It never changes.
 
 ### application.yaml
 
@@ -674,7 +718,10 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 | `rb doctor`                                                                        | Check everything; change nothing                    |
 | `rb init-user <name>`                                                              | Create another user folder                          |
 | `rb export-files`                                                                  | Recreate missing files from the database            |
-| `rb new-job [--company --department --title --url --source --create]`              | Start tracking a job                                |
+| `rb new-job <url> [--company --department --title --create --set F=V --yes]`       | Start a job from its posting link, reviewed once    |
+| `rb new-job --stdin [<url>] < posting.txt`                                         | The same, from pasted posting text                  |
+| `rb new-job <url> --recapture <job-id> [--replace]`                                | Save a new copy of a posting for an existing job    |
+| `rb new-job [--company --department --title --source --create]`                    | Start a job without a link (paste the posting later) |
 | `rb list [--stage --company --all]`                                                | List applications                                   |
 | `rb show <job-id>`                                                                 | One application in full                             |
 | `rb event <job-id> [--type --stage --date --notes --documents --corrects]`         | Add an event                                        |
@@ -701,6 +748,7 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 ## 17. Privacy and security
 
 - Your data stays on your computer: your folder, the database volume and backups. Nothing is sent anywhere by the app.
+- The one thing the app fetches from the internet is a job posting, when you run `rb new-job <url>`: a single request to that link, with no cookies and nothing about you. Links that point to your own network or computer are refused. Turn it off with `intake.fetch: false` in `user.yaml`.
 - The website and API listen only on `127.0.0.1`, so other computers can't reach them.
 - Your email and phone live only in `.env` (or Docker secrets). They're not in your files, the database, snapshots, logs or the public site.
 - The Docker image contains no user data; it's excluded at build time.
@@ -722,6 +770,8 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 | Contact details missing from PDFs                 | Set `RB_CONTACT_EMAIL`/`RB_CONTACT_PHONE` in `.env`, then `docker compose up -d`.                               |
 | "That token isn't valid"                          | It was replaced. Issue a new one: `rb token --actor agent`.                                                           |
 | A job folder disappeared                          | Nothing was deleted: `rb export-files`.                                                                               |
+| `rb new-job <url>` says the page needs a sign-in or JavaScript, or has too little text | Copy the posting from your browser into a file: `rb new-job --stdin <link> < posting.txt`. |
+| `rb new-job <url>` says "already tracking this posting" | Use `--recapture <job-id>` to update that job's posting, or `--allow-duplicate` for a separate job.                    |
 | Something else                                    | `docker compose logs app`, then `rb doctor`.                                                                        |
 
 ## 19. What isn't built yet
@@ -729,4 +779,5 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 - Pushing the public site to its target automatically (`rb publish` exports it; you copy it).
 - More than one design template (`classic` only).
 - Importing an existing resume into `base.yaml`.
+- Starting a job from a file in your folder (`rb new-job --file`), and letting the AI agent propose a new job for you to confirm. For now, pipe pasted text with `--stdin`.
 - File changes are detected by checking every few seconds, not by instant notification. It works the same across every operating system's Docker mounts.
