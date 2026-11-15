@@ -85,6 +85,12 @@ class BackupSettings(Strict):
     keep: int = Field(30, ge=1, le=1000, description="How many backups of each kind to keep")
 
 
+class IntakeSettings(Strict):
+    fetch: bool = Field(True, description="false = intake never fetches a URL; paste the posting text instead")
+    timeout_seconds: int = Field(20, ge=1, le=120, description="Give up on a site that takes longer than this")
+    max_bytes: int = Field(2_000_000, ge=10_000, le=10_000_000, description="Refuse pages larger than this many bytes")
+
+
 class PublishSettings(Strict):
     enabled: bool = False
     target: ShortText | None = Field(None, description="Where the public site goes, for example a GitHub Pages repo")
@@ -104,6 +110,7 @@ class UserSettings(Strict):
     writing: WritingSettings = Field(default_factory=WritingSettings)
     snapshots: SnapshotSettings = Field(default_factory=SnapshotSettings)
     backups: BackupSettings = Field(default_factory=BackupSettings)
+    intake: IntakeSettings = Field(default_factory=IntakeSettings)
     publish: PublishSettings = Field(default_factory=PublishSettings)
 
 

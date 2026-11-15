@@ -168,7 +168,7 @@ class App:
                  plugins: tuple | list = (), load_entry_points: bool = False, tenant_id: str = LOCAL_TENANT,
                  template_dirs: tuple | list = (), document_template_dirs: tuple | list = (),
                  storage_factory=None, file_store_factory=None, secrets: SecretStore | None = None,
-                 change_listeners: list | None = None):
+                 change_listeners: list | None = None, fetcher=None):
         from .operations import core_registry
         from .plugins import Extensions, apply_plugin, discover_plugins
 
@@ -178,6 +178,10 @@ class App:
         self.storage_factory = storage_factory or sqlite_storage  # (app, user_id) -> Storage
         self.file_store_factory = file_store_factory or local_file_store  # (app, user_id, area) -> FileStore
         self.secrets: SecretStore = secrets or EnvSecretStore()
+        if fetcher is None:  # job intake: one safe GET of a posting URL (fetch.py); tests pass a stub
+            from .fetch import HttpPostingFetcher
+            fetcher = HttpPostingFetcher()
+        self.fetcher = fetcher
         if change_listeners is None:  # locally: write changes back to the user's YAML/Markdown files
             from .sync_ops import write_back
             change_listeners = [write_back]

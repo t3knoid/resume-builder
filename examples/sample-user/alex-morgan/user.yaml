@@ -27,6 +27,10 @@ snapshots:
   max_total: 1000
 backups:
   keep: 30
+intake:
+  fetch: true
+  timeout_seconds: 20
+  max_bytes: 2000000
 publish:
   enabled: false
   target: null

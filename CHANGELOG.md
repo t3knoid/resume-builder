@@ -4,6 +4,7 @@ Notable changes to resume-builder, newest first. Requirement and decision ids (s
 
 ## Unreleased
 
+- Job intake groundwork (#18): a safe one-shot fetcher for posting URLs (`fetch.py`, R13.5–R13.9). It checks every resolved address, and every redirect, against loopback, private, link-local and other internal ranges and connects to the checked address; at most 5 redirects; timeout and size limit; HTML or plain text only; no cookies or user data. Fetches are audited with the host only. New `intake` settings in `user.yaml` (`fetch`, `timeout_seconds`, `max_bytes`). The App takes a `fetcher`, so tests use a local stub. No new dependencies.
 - Job intake groundwork (#17): captured job postings are stored in the database (migration 0002, R13.10, D29). Captures are append-only, enforced by the schema; every capture is kept. Migrations can now contain triggers.
 - One-step setup: `setup.sh` (macOS, Linux) and `setup.bat` / `setup.ps1` (Windows) create `.env` on the first run, then build and start the app and install the `rb` command.
 - `rb` without Docker commands: `scripts/install-rb.sh` (macOS, Linux) and `scripts/install-rb.cmd` (Windows) install an `rb` command that runs `rb` in the container from any folder. On Windows it is added to the user PATH without changing anything else in it, and `-Uninstall` restores the PATH exactly.
