@@ -393,6 +393,29 @@ class PostingCapture(BaseModel):
         return self
 
 
+IntakeFieldName = Literal["title", "company", "department", "posting_url", "source", "external_id", "location",
+                          "work_arrangement", "salary_range", "date_posted", "closing_date"]
+FieldOrigin = Literal["structured", "rule", "adapter", "agent"]
+
+
+class ExtractedField(BaseModel):
+    """One application field taken from a captured posting, with the passage it came from (PRD R13.15).
+
+    The passage must appear in the capture and must support the value; `posting_fields.verify`
+    checks both, whoever proposed the value.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: IntakeFieldName
+    value: Annotated[str, StringConstraints(min_length=1, max_length=300)] = Field(
+        description="As stated in the posting. Dates as YYYY-MM-DD; work_arrangement remote | hybrid | onsite; "
+                    "source linkedin | job_board | company_site")
+    passage: Annotated[str, StringConstraints(min_length=1, max_length=2000)] = Field(
+        description="The exact text from the posting that states the value")
+    origin: FieldOrigin = "rule"
+
+
 def content_hash(text: str) -> str:
     """The hash stored with a capture: sha256 of the UTF-8 text, hex."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()

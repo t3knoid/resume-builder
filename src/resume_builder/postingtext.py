@@ -366,6 +366,14 @@ def _job_postings(blocks: list[str]):
                 stack.extend(v for k, v in d.items() if k == "@graph")
 
 
+def job_postings(html: str) -> list[dict]:
+    """The schema.org JobPosting objects embedded in a page as JSON-LD."""
+    b = _Builder()
+    b.feed(html)
+    b.close()
+    return list(_job_postings(b.json_ld))
+
+
 def _job_posting_description(blocks: list[str]) -> str | None:
     for jp in _job_postings(blocks):
         desc = jp.get("description")

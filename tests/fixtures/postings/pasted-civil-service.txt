@@ -1,0 +1,21 @@
+https://jobs.springfield.example.gov/job/systems-administrator-iii-jid-55021?trid=abc123
+SYSTEMS ADMINISTRATOR III
+DEPARTMENT OF TRANSPORTATION
+Posted on
+11/12/2026
+Full-time
+Location
+SPRINGFIELD-ALL DISTRICTS
+Exam may be required
+Department
+INFORMATION TECHNOLOGY DIVISION
+Salary range:
+$98,500.00 – $141,200.00
+Job Description
+The Department of Transportation keeps the city's roads, bridges and signals running. Its Information Technology Division supports the systems behind traffic management and permits.
+Lead the Windows Server team and act as the escalation point for outages.
+Administer Active Directory, Group Policy, DNS and DHCP.
+Automate server builds with PowerShell and Ansible.
+Apply CIS Benchmarks across all managed servers.
+TO APPLY:
+Visit the city jobs site and search for JOB ID # 714052.
