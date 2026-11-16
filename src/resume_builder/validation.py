@@ -134,6 +134,8 @@ def validate_profile(profile: Profile, lib: ContentLibrary, rel: str, archived: 
     for gid in profile.skills:
         if gid not in skills:
             missing(gid, "Skill group", "skills")
+        elif skills[gid].status != "confirmed":
+            draft(gid, "Skill group", "skills")
 
     tags = lib.all_tags()
     for kw in profile.keywords:

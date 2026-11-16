@@ -30,7 +30,8 @@ def fetch_limits(space: UserSpace, json: bool = False) -> FetchLimits:
     return FetchLimits(timeout_seconds=s.timeout_seconds, max_bytes=s.max_bytes, json=json)
 
 
-def fetch_posting(space: UserSpace, ctx: RequestContext, url: str, json: bool = False) -> FetchedPage:
+def fetch_posting(space: UserSpace, ctx: RequestContext, url: str, json: bool = False,
+                  audit_as: str = "posting:fetch") -> FetchedPage:
     """Fetch one posting URL with the user's limits, through the App's fetcher (R13.5–R13.9).
 
     Audited with the host only, never the full URL or the content (R13.27). Callers decide what to
@@ -38,17 +39,17 @@ def fetch_posting(space: UserSpace, ctx: RequestContext, url: str, json: bool = 
     """
     host = (urlsplit(url).hostname or "").lower() or "(invalid url)"
     if not space.user_settings.intake.fetch:
-        space.audit(ctx, "posting:fetch", target=host, result="refused: intake.fetch is false")
+        space.audit(ctx, audit_as, target=host, result="refused: intake.fetch is false")
         raise FetchFailed("fetch-disabled", "Fetching links is turned off (`intake.fetch: false` in user.yaml).")
     try:
         page = space.app.fetcher.fetch(url, fetch_limits(space, json=json))
     except FetchFailed as exc:
-        space.audit(ctx, "posting:fetch", target=host, result=f"failed: {exc.reason}")
+        space.audit(ctx, audit_as, target=host, result=f"failed: {exc.reason}")
         raise
     except Exception as exc:
-        space.audit(ctx, "posting:fetch", target=host, result=f"failed: {type(exc).__name__}")
+        space.audit(ctx, audit_as, target=host, result=f"failed: {type(exc).__name__}")
         raise
-    space.audit(ctx, "posting:fetch", target=host, result="ok")
+    space.audit(ctx, audit_as, target=host, result="ok")
     return page
 
 

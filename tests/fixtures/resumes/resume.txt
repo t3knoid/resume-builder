@@ -1,0 +1,40 @@
+ALEX MORGAN
+alex@example.com · +1 555 010 0199 · https://www.linkedin.com/in/alex-morgan-example
+
+SUMMARY
+Platform engineer who turns manual operations work into tested automation. Calm in an incident and happy to write the runbook afterwards.
+
+EXPERIENCE
+Platform Engineer, Northwind Laboratories, Remote
+Jul 2024 - Present
+• Moved 30 nightly batch jobs from cron to Kubernetes CronJobs with retries and alerts.
+• Wrote the on-call runbook the team uses for every database failover.
+
+Fabrikam Logistics, Portland, OR
+Senior Platform Engineer    04/2021 - 06/2024
+• Cut release time from 3 hours to 25 minutes by moving 14 services to GitHub Actions pipelines with automated tests.
+• Introduced blue-green deployments for the tracking API, removing downtime from releases.
+
+Junior Systems Administrator at Wide World Importers, Seattle, WA    2015 - 2016
+• Kept the office network and 40 laptops running for a team of 35 people.
+
+Volunteer Mentor, Code Club
+• Mentored students in Python every week.
+
+PROJECTS
+Home lab | 2023 - present
+• Run a three-node Proxmox cluster with nightly backups and restore tests.
+
+EDUCATION
+Lakeside State University
+B.S. in Computer Science, 2016
+
+CERTIFICATIONS
+Certified Kubernetes Administrator (CKA) | Cloud Native Computing Foundation | 2023
+
+SKILLS
+Automation: Ansible, Python, Bash, Terraform
+Languages: Python, Go
+
+AWARDS
+Ops engineer of the year, 2023

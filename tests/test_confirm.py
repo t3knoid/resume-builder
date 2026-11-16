@@ -26,13 +26,18 @@ def test_confirming_a_role_lists_its_draft_bullets(app, sample, owner):
     assert "Draft bullets to confirm: fab-new-draft." in _confirm_error(app, owner, "role-fabrikam")
 
 
-def test_confirming_a_project_or_skill_group_explains_why_not(app, sample, owner):
+def test_confirming_a_project_explains_why_not(app, sample, owner):
     assert "`proj-llm-lab` is a project" in _confirm_error(app, owner, "proj-llm-lab")
-    assert "skill group" in _confirm_error(app, owner, "sk-automation")
+
+
+def test_skill_groups_are_confirmed_like_other_items(app, sample, owner):
+    """Skill groups have a status since issue #1: imported ones come in as drafts."""
+    assert invoke(app, owner, "item_confirm", {"id": "sk-automation"}) == {"confirmed": "sk-automation"}
 
 
 def test_confirming_an_unknown_id_says_what_can_be_confirmed(app, sample, owner):
-    assert "Only bullets, summary phrases, education and certifications" in _confirm_error(app, owner, "no-such-item")
+    msg = _confirm_error(app, owner, "no-such-item")
+    assert "Only bullets, summary phrases, education, certifications and skill groups" in msg
 
 
 @pytest.mark.parametrize("euid, puid", [(1000, "1000"), (0, ""), (0, "0"), (0, "abc")])

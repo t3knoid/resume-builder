@@ -23,6 +23,7 @@ New here? Start with the [quick start](QUICKSTART.md). Connecting an AI assistan
   - [Removing things](#removing-things)
   - [Backups before changes](#backups-before-changes)
 - [5. Your content library: base.yaml](#5-your-content-library-baseyaml)
+  - [Starting from your existing resume](#starting-from-your-existing-resume)
   - [Summary phrases](#summary-phrases)
   - [Roles](#roles)
   - [Projects](#projects)
@@ -159,7 +160,7 @@ data/<you>/
   base.yaml               your content library
   organizations.yaml      companies and departments you've looked at
   profiles/public.yaml    what your general resume shows
-  intake/                 posting text you saved from a browser, for rb new-job --file (see its README.md)
+  intake/                 posting text you saved from a browser (rb new-job --file) or your old resume (rb import-resume); see its README.md
   jobs/<job-id>/
     posting.md            the job description
     application.yaml      the application record and its event history
@@ -265,7 +266,50 @@ The file also starts with `schema_version: 1`. Leave it as it is.
 - **Text length** is limited to 300 characters for short fields (titles, names, locations) and 5,000 for long ones (bullet text, descriptions).
 - **Comments** (`# ...`) are kept when the app writes the file back. Use them for notes that have no field, such as a short description of a company. Comments never appear on documents.
 
-Not every item has a `status`. Bullets, summary phrases, education and certifications do, and only confirmed ones reach real documents. Roles, projects and skill groups don't: a role or project appears when a profile picks one of its confirmed bullets, and a skill group appears when a profile lists it.
+Not every item has a `status`. Bullets, summary phrases, education, certifications and skill groups do, and only confirmed ones reach real documents. Roles and projects don't: a role or project appears when a profile picks one of its confirmed bullets.
+
+### Starting from your existing resume
+
+You don't have to type `base.yaml` from scratch. If you have a resume as HTML, Markdown or plain text, import it:
+
+1. Save it in your intake folder, for example `data/<your-name>/intake/resume.html` (or `.md`, `.txt`). For a PDF or Word file, save or export it as text or HTML first (in Word: **File > Save As > Plain Text** or **Web Page**).
+2. Run `rb import-resume intake/resume.html`.
+3. It shows what it found: the new items, anything that looks like something already in your library, anything it couldn't import and why, and what to check. Type `yes` to add the new items to `base.yaml`. Any other answer changes nothing.
+
+```sh
+rb import-resume intake/resume.html                   # the same on Windows
+```
+
+Or give a link to your resume: your own resume web page, a Markdown or text file online, or a Google Doc shared with "anyone with the link":
+
+```sh
+rb import-resume https://example.com/resume        # the same on Windows
+```
+
+The page is fetched once, with the same safety checks as a job posting link (section 7), and the import asks before adding anything. If the page changed between the preview and your `yes`, nothing is added and it asks you to run it again. A page behind a sign-in (LinkedIn, for example) or one that only works with JavaScript can't be read: save it in your intake folder instead. `intake.fetch: false` in `user.yaml` turns fetching off.
+
+You can also pipe the text in. Piped in, it can't ask you, so it shows what it found and stops; run it again with `--yes` to import:
+
+```sh
+rb import-resume --stdin < resume.txt                 # macOS, Linux: look first
+rb import-resume --stdin --yes < resume.txt           # then import
+```
+
+```powershell
+Get-Content resume.txt -Raw | rb import-resume --stdin          # Windows PowerShell: look first
+Get-Content resume.txt -Raw | rb import-resume --stdin --yes    # then import
+```
+
+What to expect:
+
+- **Everything comes in as a draft.** Nothing imported can reach a real resume until you've checked it and confirmed it (`rb confirm <id>`, or `rb confirm --all` once you've gone through everything).
+- **Your words are kept.** Bullets and phrases are copied, not rewritten. Nothing is added that your resume doesn't say: `metric` stays empty and items have no tags. Bullets that mention numbers are listed, so you can fill in `metric` where the number is one you can stand behind. Add tags so profiles can use the items as keywords.
+- **Nothing you have is changed.** New items get new ids. Something that looks like an item already in your library is listed, not imported or merged. New bullets for a role you already have (same company and start date) go under that role.
+- **It reads, it doesn't guess.** Sections are found by their headings (Summary, Experience, Projects, Education, Certifications, Skills, and common variants), and entries by their header lines and bullet points. When it isn't sure which part of a header is the title and which the company, it says so. A role without a title, company or start date isn't imported; the report says which.
+- **Contact details are left out.** Your email address and phone number come from the secrets named in `user.yaml`, never from `base.yaml`. Links are listed so you can add the ones you want under `links` in `user.yaml`. Sections the library doesn't hold, such as Awards or Languages, are named as left out.
+- **Companies:** a company your organization registry already knows (by name or alias) gets the registry's name. Other employers are listed with the `rb add-company` command, in case you'll track jobs there; nothing is added to the registry by itself.
+
+Then open `base.yaml`, fix anything that was misread, add tags and metrics, and confirm. Importing the same resume again adds nothing new. An AI agent can import resume text or a link you give it in the chat (operation `library_import`), the same way and only as drafts.
 
 ### Summary phrases
 
@@ -412,19 +456,21 @@ certifications:
 
 ### Skills
 
-Named groups of skills, shown as the group name followed by its items. A profile lists the groups to show, in order. Skill groups have no status, so check them before a profile uses them. Prefer skills a bullet backs up: a fit report can't cite a skill that no bullet supports.
+Named groups of skills, shown as the group name followed by its items. A profile lists the groups to show, in order. Prefer skills a bullet backs up: a fit report can't cite a skill that no bullet supports.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Unique id. Profiles refer to the group by this. |
 | `name` | yes | The heading, e.g. `CI/CD & Developer Platforms`. |
 | `items` | no | The skills, in the order to show them. |
+| `status` | no | `draft` or `confirmed`. Leave it out and the group counts as confirmed (groups written before skill groups had a status keep working). Imported groups come in as `draft`: confirm a group once every item in it is a skill you have. |
 
 ```yaml
 skills:
   - id: skills-ci-cd
     name: CI/CD
     items: [Jenkins, TeamCity, GitHub Actions]
+    status: confirmed
 ```
 
 ### Editor help
@@ -435,9 +481,9 @@ The first line of `base.yaml` links a schema generated from the app's own models
 
 **Writing tips:** lead with the outcome, then the evidence. Use real tool names. Avoid filler like "proven track record" (the banned phrases list in `user.yaml` catches these in letters).
 
-You can confirm an item from the command line too: `rb confirm <id>`. Only bullets, summary phrases, education and certifications have a status. Roles, projects and skill groups don't: a role or project shows on a resume once a profile picks one of its confirmed bullets, so confirm the bullets (giving a role's id to `rb confirm` lists its draft bullets). Example entries (`example-`) can't be confirmed; replace them.
+You can confirm an item from the command line too: `rb confirm <id>`. Bullets, summary phrases, education, certifications and skill groups have a status. Roles and projects don't: a role or project shows on a resume once a profile picks one of its confirmed bullets, so confirm the bullets (giving a role's id to `rb confirm` lists its draft bullets). Example entries (`example-`) can't be confirmed; replace them.
 
-To confirm everything at once, run `rb confirm --all`. It lists every draft bullet, summary phrase, education and certification, then asks you to type `yes` before changing anything; any other answer leaves everything as it was. Only items on that list are confirmed, so nothing added in the meantime slips through. Use it after you've reviewed the whole library, for example right after importing your resume, not as a shortcut past checking. Add `--yes` to skip the question in a script.
+To confirm everything at once, run `rb confirm --all`. It lists every draft bullet, summary phrase, education, certification and skill group, then asks you to type `yes` before changing anything; any other answer leaves everything as it was. Only items on that list are confirmed, so nothing added in the meantime slips through. Use it after you've reviewed the whole library, for example right after importing your resume, not as a shortcut past checking. Add `--yes` to skip the question in a script.
 
 ## 6. Companies and departments
 
@@ -893,6 +939,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb update-drafts` / `confirm-update <n>` / `discard-update <n>`               | Changes to job fields proposed by the agent         |
 | `rb archive-job <job-id> [--restore]`                                              | Archive an application                              |
 | `rb orgs` / `add-company` / `add-department` / `rename-org` / `merge-orgs` | Companies and departments                           |
+| `rb import-resume intake/<file>\|<link> [--format --yes]` / `--stdin`              | Import an existing resume as draft library items    |
 | `rb confirm <id>`                                                                  | Confirm a draft library item                        |
 | `rb confirm --all [--yes]`                                                         | Confirm every draft, after listing them and asking  |
 | `rb brief <job-id>`                                                                | The agent brief                                     |
@@ -947,5 +994,4 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 
 - Pushing the public site to its target automatically (`rb publish` exports it; you copy it).
 - More than one design template (`classic` only).
-- Importing an existing resume into `base.yaml`.
 - File changes are detected by checking every few seconds, not by instant notification. It works the same across every operating system's Docker mounts.

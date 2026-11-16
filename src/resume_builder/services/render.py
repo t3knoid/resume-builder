@@ -200,7 +200,7 @@ def resolve_resume(lib: ContentLibrary, profile: Profile, preview: bool) -> tupl
     edu = [e.model_dump(mode="json", exclude={"status", "id"}) for e in lib.education if e.id in profile.education and ok(e)]
     certs = [c.model_dump(mode="json", exclude={"status", "id"}) for c in lib.certifications if c.id in profile.certifications and ok(c)]
     groups = {g.id: g for g in lib.skills}
-    skills = [{"name": groups[g].name, "items": groups[g].items} for g in profile.skills if g in groups]
+    skills = [{"name": groups[g].name, "items": groups[g].items} for g in profile.skills if g in groups and ok(groups[g])]
     sections = {
         "summary": summary,
         "roles": section(profile.roles, roles, "role"),

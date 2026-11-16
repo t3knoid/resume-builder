@@ -111,7 +111,7 @@ api = create_app(
 | `secrets` | A `SecretStore` | `secretstore.EnvSecretStore` |
 | `change_listeners` | Callables `(space, Change) -> bool` | `[sync_ops.write_back]` |
 | `web_hosts` | Host names the website and API answer to. Every request with another `Host` is refused before any route runs (against DNS rebinding, PRD R8.9). Given a list, only those names work | `localhost`, `127.0.0.1`, `::1`, plus `RB_WEB_HOSTS` |
-| `fetcher` | A `fetch.PostingFetcher`: `fetch(url, limits) -> FetchedPage`, for job intake (PRD 8.13). A replacement must keep R13.5–R13.8: one GET, no cookies or user data, internal addresses refused on every redirect, timeout and size limit | `fetch.HttpPostingFetcher` |
+| `fetcher` | A `fetch.PostingFetcher`: `fetch(url, limits) -> FetchedPage`, for job intake (PRD 8.13) and importing a resume from a link (R2.11). A replacement must keep R13.5–R13.8: one GET, no cookies or user data, internal addresses refused on every redirect, timeout and size limit | `fetch.HttpPostingFetcher` |
 | `policy` | A `Policy` | the process-wide `RolePolicy` |
 | `tenant_id` | The tenant of the user spaces this App serves | `"local"` |
 
@@ -190,7 +190,7 @@ It also has `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (cl
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 
-The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`) and the bootstrap.
+The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`, and `job_intake_preview_file` and `library_import_file`, which read a file the user saved in their intake folder and hand its text to the service) and the bootstrap.
 
 Services never write those files. After a write they call `space.changed(kind, key)`, and every change listener on the App receives a `Change`. Locally that listener is `sync_ops.write_back`, which updates the working copy and keeps comments. A host without user files passes `change_listeners=[]`, or its own listeners.
 

@@ -44,11 +44,12 @@ class ConfirmIn(BaseModel):
     id: str
 
 
-@operation("item_confirm", "content:confirm", ConfirmIn, "Confirm a draft bullet, summary phrase, education or certification.", writes=True)
+@operation("item_confirm", "content:confirm", ConfirmIn,
+           "Confirm a draft bullet, summary phrase, education, certification or skill group.", writes=True)
 def item_confirm(space: UserSpace, ctx: RequestContext, data: ConfirmIn) -> dict:
     lib = space.repo.load_library()
     target = lib.all_bullets().get(data.id)
-    for coll in (lib.summary_phrases, lib.education, lib.certifications):
+    for coll in (lib.summary_phrases, lib.education, lib.certifications, lib.skills):
         target = target or next((x for x in coll if x.id == data.id), None)
     if target is None:
         raise NotFound(_not_confirmable(lib, data.id))
@@ -72,11 +73,13 @@ def _drafts(lib: ContentLibrary) -> list[tuple[str, str, object]]:
         out += [("bullet", b.text, b) for b in parent.bullets if b.status == "draft"]
     out += [("education", " ".join(x for x in (e.degree, e.field, e.institution) if x), e) for e in lib.education if e.status == "draft"]
     out += [("certification", c.name, c) for c in lib.certifications if c.status == "draft"]
+    out += [("skill group", f"{g.name}: {', '.join(g.items)}", g) for g in lib.skills if g.status == "draft"]
     return out
 
 
 @operation("library_confirm_all", "content:confirm", ConfirmAllIn,
-           "Confirm every draft bullet, summary phrase, education and certification at once. Dry run by default.", writes=True)
+           "Confirm every draft bullet, summary phrase, education, certification and skill group at once. Dry run by default.",
+           writes=True)
 def library_confirm_all(space: UserSpace, ctx: RequestContext, data: ConfirmAllIn) -> dict:
     lib = space.repo.load_library()
     drafts = _drafts(lib)
@@ -107,9 +110,8 @@ def _not_confirmable(lib: ContentLibrary, item_id: str) -> str:
         else:
             msg += " All its bullets are already confirmed."
         return msg
-    if any(s.id == item_id for s in lib.skills):
-        return f"`{item_id}` is a skill group; skill groups aren't confirmed. A profile shows it when it lists the group's id."
-    return f"No item `{item_id}` in your content library. Only bullets, summary phrases, education and certifications are confirmed."
+    return (f"No item `{item_id}` in your content library. Only bullets, summary phrases, education, certifications "
+            "and skill groups are confirmed.")
 
 
 def _save_library(space: UserSpace, ctx: RequestContext, lib: ContentLibrary) -> None:

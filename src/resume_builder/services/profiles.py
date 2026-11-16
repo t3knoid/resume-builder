@@ -120,6 +120,10 @@ How to work (resume-builder MCP tools):
 8. When the user tells you something new for an existing job (why they want it, how interested they
    are, a next step), call `application_propose_update` with their words. They confirm it with
    `rb confirm-update <n>`.
+9. When the user gives you their existing resume to start their library, call `library_import` with
+   its `text` or its `url` (dry run first, show them the report, then with "dry_run": false and the
+   report's `content_hash` as `expect_hash`). Everything comes in as
+   drafts in their words; they check base.yaml and confirm with `rb confirm --all`.
 """,
     "api": lambda user, job: f"""\
 How to submit (HTTP API at http://localhost:8000, header `Authorization: Bearer <agent token>`):
@@ -128,6 +132,8 @@ How to submit (HTTP API at http://localhost:8000, header `Authorization: Bearer 
 - Cover letter: the same with "kind": "cover_letter". Answer: "kind": "answer", "slug": "why-here",
   "question": "Why do you want to work here?"
 - Missing content: POST /api/{user}/bullet_propose (saved as a draft for the user to confirm).
+- The user's existing resume, to start their library: POST /api/{user}/library_import  {{"text": "..."}} (or "url"),
+  a dry run; then again with "dry_run": false and "expect_hash": the dry run's content_hash. Drafts only.
 - New job from a posting: POST /api/{user}/job_intake_propose  {{"url": "..."}} (or "text"), plus optional
   "fields": [{{"name": "location", "value": "...", "passage": "<exact text from the posting>"}}] and the
   user's own answers, word for word: "from_user": {{"interest_level": 4, "interest_notes": "<their words>"}}.
@@ -230,9 +236,10 @@ def agent_brief(space: UserSpace, ctx: RequestContext, data: BriefIn) -> str:
                 if b.limits:
                     extra.append(f"limits: {b.limits}")
                 lines.append(f"- `{b.id}` [{', '.join(b.tags)}] {b.text.replace('**', '')}" + (f" ({'; '.join(extra)})" if extra else ""))
-    if lib.skills:
+    groups = [g for g in lib.skills if g.status == "confirmed"]
+    if groups:
         lines.append("\n### Skill groups")
-        for g in lib.skills:
+        for g in groups:
             lines.append(f"- `{g.id}` {g.name}: {', '.join(g.items)}")
     education = [e for e in lib.education if e.status == "confirmed"]
     certifications = [c for c in lib.certifications if c.status == "confirmed"]
@@ -247,6 +254,7 @@ def agent_brief(space: UserSpace, ctx: RequestContext, data: BriefIn) -> str:
             extra = ", ".join(str(x) for x in (getattr(c, "issuer", None), getattr(c, "date", None)) if x)
             lines.append(f"- `{c.id}` {c.name}" + (f" ({extra})" if extra else ""))
     drafts = [b.id for b in lib.all_bullets().values() if b.status != "confirmed"]
+    drafts += [g.id for g in lib.skills if g.status != "confirmed"]
     if drafts:
         lines.append(f"\n(Not usable until the user confirms them: {', '.join(drafts)})")
     return "\n".join(lines) + "\n"

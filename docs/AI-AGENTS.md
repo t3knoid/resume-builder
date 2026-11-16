@@ -39,6 +39,7 @@ Whatever the assistant, it works as the **agent**: it can only propose drafts, a
 | Write tailored profiles and fit reports | Approve cover letters or answers |
 | Draft cover letters and answers (strict checks) | Record events, only propose them for you to confirm |
 | Propose new bullets (always saved as drafts) | Add, rename or merge companies |
+| Import a resume you give it (text or a link) into your library, as drafts (`library_import`) | Change anything already in your library |
 | Propose events, e.g. from a recruiter email you paste | Sync, back up, restore, publish, delete or pin snapshots |
 | Propose a new job from a posting link or text | Create a job, only propose it for you to confirm |
 

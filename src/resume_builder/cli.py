@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import date
 
@@ -514,6 +515,15 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("id", nargs="?")
     cf.add_argument("--all", action="store_true", help="confirm every draft (lists them and asks first)")
     cf.add_argument("--yes", "-y", action="store_true", help="with --all: skip the question")
+    im = cmd("import-resume", "Import an existing resume (HTML, Markdown or plain text) as draft content library entries. "
+                              "Shows what it found and asks before adding anything.")
+    im.add_argument("file", nargs="?", metavar="intake/NAME or LINK",
+                    help="your resume saved in your intake folder (e.g. intake/resume.html), or a link to it "
+                         "(your resume page, a Markdown or text file, a public Google Doc): fetched once")
+    im.add_argument("--stdin", action="store_true", help="read the resume from stdin instead of a file")
+    im.add_argument("--format", default="auto", choices=["auto", "html", "markdown", "text"],
+                    help="the resume's format (default: detect it)")
+    im.add_argument("--yes", "-y", action="store_true", help="add the drafts without asking")
     ap = cmd("approve", "Approve a cover letter or answer.")
     ap.add_argument("job_id")
     ap.add_argument("kind", choices=["cover_letter", "answer"])
@@ -779,6 +789,8 @@ def _run(app: App, args) -> int | None:
             _print(op("item_confirm", {"id": args.id}))
         else:
             return confirm_all(op, args.yes)
+    elif c == "import-resume":
+        return import_resume_cmd(op, args)
     elif c == "approve":
         _print(op("document_approve", {"job_id": args.job_id, "kind": args.kind, "slug": args.slug}))
     elif c == "render":
@@ -836,6 +848,80 @@ def print_sync(result: dict) -> None:
                   + (f" Example: {p['example']}" if p.get("example") else ""))
     if result.get("backup"):
         print(f"(Database backed up first: {result['backup']})")
+
+
+def import_resume_cmd(op, args, ask=input) -> int:
+    """`rb import-resume`: show what the resume holds, ask once, then add it all as drafts (issue #1)."""
+    if bool(args.file) == bool(args.stdin):
+        raise AppError("Give the resume's file in your intake folder (`rb import-resume intake/resume.html`), "
+                       "a link to it, or --stdin.")
+    if args.stdin:
+        text = sys.stdin.read().lstrip("﻿")
+        if not text.strip():
+            raise AppError("Nothing came in on stdin. Pipe your resume in: rb import-resume --stdin < resume.txt")
+
+        def run(dry_run: bool, expect: str | None = None) -> dict:
+            return op("library_import", {"text": text, "format": args.format, "dry_run": dry_run, "expect_hash": expect})
+    elif re.match(r"^https?://", args.file, re.I):   # a link: fetched for the preview, and again to import
+        def run(dry_run: bool, expect: str | None = None) -> dict:
+            return op("library_import", {"url": args.file, "format": args.format, "dry_run": dry_run, "expect_hash": expect})
+    else:
+        def run(dry_run: bool, expect: str | None = None) -> dict:
+            return op("library_import_file", {"file": args.file, "format": args.format, "dry_run": dry_run,
+                                              "expect_hash": expect})
+    preview = run(True)
+    print_import(preview)
+    if not preview["added"]:
+        return 0
+    if not args.yes:
+        if args.stdin or not sys.stdin.isatty():
+            raise AppError("Not importing without an answer. Run it in a terminal, or add --yes.")
+        try:
+            answer = ask(f"Add these {len(preview['added'])} item(s) to base.yaml as drafts? Type 'yes' to continue: ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("yes", "y"):
+            print("Nothing changed.")
+            return 1
+    done = run(False, preview["content_hash"])   # exactly what the preview showed, or nothing
+    print(f"\nAdded {len(done['added'])} item(s) to base.yaml as drafts.")
+    print(done["next"])
+    return 0
+
+
+def print_import(r: dict) -> None:
+    where = f" from {r['file']}" if r.get("file") else (f" from {r['source']}" if r.get("source") else "")
+    print(f"Read your resume{where} ({r['format']}).")
+    if r["added"]:
+        counts = ", ".join(f"{n} {k}{'s' if n != 1 else ''}" for k, n in r["counts"].items())
+        print(f"\nNew, as drafts ({counts}):")
+        parent = None
+        for a in r["added"]:
+            if a["kind"] in ("role", "project"):
+                parent = a["id"]
+            elif a["kind"] == "bullet" and a["parent"] != parent:   # a new bullet under an item you already have
+                parent = a["parent"]
+                print(f"  {parent}  (already in your library)")
+            indent = "      " if a["kind"] == "bullet" else "  "
+            print(f"{indent}{a['id']}  ({a['kind']})  {a['text']}")
+    if r["duplicates"]:
+        print("\nAlready in your library, not imported:")
+        for d in r["duplicates"]:
+            print(f"  {d['kind']}: {d['text']}  (looks like `{d['existing_id']}`)")
+    if r["skipped"]:
+        print("\nNot imported:")
+        for sk in r["skipped"]:
+            print(f"  {sk['kind']}: {sk['text']}\n      {sk['reason']}")
+    if r["attention"]:
+        print("\nCheck:")
+        for a in r["attention"]:
+            print(f"  - {a}")
+    if r["companies_not_in_registry"]:
+        print("\nCompanies not in your organization registry (add one only if you'll track jobs there):")
+        for c in r["companies_not_in_registry"]:
+            print(f"  {c['name']}: {c['command']}")
+    if not r["added"]:
+        print("\nNothing new to import.")
 
 
 def confirm_all(op, yes: bool, ask=input) -> int:

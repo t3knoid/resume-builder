@@ -191,6 +191,9 @@ class SkillGroup(Strict):
     id: ItemId
     name: ShortText
     items: list[ShortText] = Field(default_factory=list)
+    # Confirmed unless marked draft: groups written before skill groups had a status stay usable.
+    # Imported groups come in as drafts (issue #1) and need confirming like any other draft.
+    status: Status = Field("confirmed", description="draft until you've checked every item is a skill you have, then confirmed")
 
 
 class ContentLibrary(Strict):

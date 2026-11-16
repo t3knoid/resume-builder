@@ -171,7 +171,7 @@ class SqliteStorage:
         for c in lib.certifications:
             upsert(c.id, "certification", None, c.status, c.model_dump(mode="json"))
         for g in lib.skills:
-            upsert(g.id, "skill_group", None, None, g.model_dump(mode="json"))
+            upsert(g.id, "skill_group", None, g.status, g.model_dump(mode="json"))
         for item_id in set(existing) - seen:
             self.conn.execute("UPDATE content_items SET archived = 1, updated_by = ?, updated_at = ? WHERE id = ? AND archived = 0", (actor, now, item_id))
 

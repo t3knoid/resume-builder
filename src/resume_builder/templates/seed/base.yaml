@@ -77,3 +77,4 @@ skills:                                # Grouped skill lists. A profile picks wh
   - id: example-skills-automation
     name: Automation
     items: [Ansible, Bash, Python]
+    status: draft                      # draft | confirmed. Confirm a group once every item is a skill you have.

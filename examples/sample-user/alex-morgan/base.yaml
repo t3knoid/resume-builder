@@ -99,9 +99,12 @@ skills:
   - id: sk-automation
     name: Automation
     items: [Ansible, Python, Bash, GitHub Actions]
+    status: confirmed
   - id: sk-observability
     name: Observability
     items: [Prometheus, Grafana, Alertmanager]
+    status: confirmed
   - id: sk-platforms
     name: Platforms
     items: [Linux, Docker]
+    status: confirmed

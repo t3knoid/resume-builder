@@ -30,7 +30,9 @@ from .errors import AppError
 
 USER_AGENT = f"resume-builder/{__version__} (job posting intake; one request per user action)"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
-CONTENT_TYPES = {"text/html": "text/html", "application/xhtml+xml": "text/html", "text/plain": "text/plain"}
+# Markdown is read as plain text: the import parses it, and a posting is kept as written either way.
+CONTENT_TYPES = {"text/html": "text/html", "application/xhtml+xml": "text/html", "text/plain": "text/plain",
+                 "text/markdown": "text/plain", "text/x-markdown": "text/plain"}
 MAX_JSON_DEPTH = 64  # JSON nested deeper than this is refused before parsing
 PASTE_FALLBACK = ("Instead, copy the posting text from your browser into a file in your intake folder, "
                   "for example intake/<name>.txt, and run: rb new-job --file intake/<name>.txt <link>")
@@ -44,6 +46,7 @@ class FetchFailed(AppError):
     def __init__(self, reason: str, message: str):
         super().__init__(f"{message} {PASTE_FALLBACK}")
         self.reason = reason
+        self.detail = message   # without the posting fallback, for callers that fetch something else (a resume)
 
 
 @dataclass(frozen=True)

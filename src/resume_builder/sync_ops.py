@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -335,19 +336,45 @@ def job_intake_preview_file(space: UserSpace, ctx: RequestContext, data: IntakeF
     Only files inside the intake folder are read, and only when asked; nothing there is changed."""
     from .services.intake import preview_text
 
-    rel = intake_rel(data.file)
+    rel, text = read_intake_file(space, data.file, "the posting text", "acme-sre.txt")
+    return preview_text(space, ctx, text, source_kind="file", source_path=rel, url=data.url)
+
+
+def read_intake_file(space: UserSpace, name: str, what: str, example: str) -> tuple[str, str]:
+    """(rel, text) of a file in the user's intake folder, read with the safe-reading limits (R7.7).
+    Only files inside the intake folder are read, and only when asked; nothing there is changed."""
+    rel = intake_rel(name)
     folder = (space.data_dir / INTAKE_DIR).resolve()
     try:
         real = (space.data_dir / rel).resolve(strict=True)
     except (FileNotFoundError, NotADirectoryError):
-        raise NotFound(f"There's no `{rel}` in your folder. Save the posting text there first (see {INTAKE_DIR}/README.md).") from None
+        raise NotFound(f"There's no `{rel}` in your folder. Save {what} there first (see {INTAKE_DIR}/README.md).") from None
     if not real.is_relative_to(folder) or not real.is_file():
         raise ValidationFailed(f"`{rel}` isn't a file in your intake folder.")
     if real.name.lower() == "readme.md" and real.parent == folder:
-        raise ValidationFailed(f"{INTAKE_DIR}/README.md explains the folder. Save the posting in a file of its own, "
-                               f"for example {INTAKE_DIR}/acme-sre.txt.")
+        raise ValidationFailed(f"{INTAKE_DIR}/README.md explains the folder. Save {what} in a file of its own, "
+                               f"for example {INTAKE_DIR}/{example}.")
     text, problems = yamlio.read_text_safely(real, rel)
     if text is None:
         raise ValidationFailed(f"Can't read `{rel}`.", problems)
-    return preview_text(space, ctx, text, source_kind="file", source_path=rel, url=data.url)
+    return rel, text
+
+
+class ImportFileIn(BaseModel):
+    file: str = Field(description="Your resume saved in your intake folder, e.g. intake/resume.html (or .md, .txt)")
+    format: Literal["auto", "html", "markdown", "text"] = Field("auto", description="auto detects it from the file name and content")
+    dry_run: bool = Field(True, description="Report what would be imported without changing anything. Set false to add the drafts.")
+    expect_hash: str | None = Field(None, description="The content_hash a dry run returned: refuse if the resume "
+                                                      "changed since (the CLI's preview, then import)")
+
+
+@operation("library_import_file", "content:propose", ImportFileIn,
+           "Like library_import, from a resume saved in the user's intake folder. Dry run by default.", writes=True)
+def library_import_file(space: UserSpace, ctx: RequestContext, data: ImportFileIn) -> dict:
+    """The file adapter reads the file; the service does the rest (issue #1). The file is never changed."""
+    from .services.library_import import import_resume
+
+    rel, text = read_intake_file(space, data.file, "your resume", "resume.html")
+    out = import_resume(space, ctx, text, data.format, rel, data.dry_run, expect_hash=data.expect_hash)
+    return {"file": rel, **out}
 
