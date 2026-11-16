@@ -433,7 +433,7 @@ def _rules(space: UserSpace, kind: str, key: str | None, model: BaseModel, rel: 
         problems = []
         if key != "public" and not space.repo.application_row(key):
             problems.append(Problem(f"There's no application for `{key}` yet; its application.yaml must sync first.", file=rel))
-        lib = space.repo.load_library()
+        lib = space.matching_library()
         return problems + validate_profile(model, lib, rel, space.repo.archived_ids())
     if kind == "application":
         return validate_application(model, space.repo.load_registry(), rel)

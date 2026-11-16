@@ -487,6 +487,15 @@ The first line of `base.yaml` links a schema generated from the app's own models
 
 **Writing tips:** lead with the outcome, then the evidence. Use real tool names. Avoid filler like "proven track record" (the banned phrases list in `user.yaml` catches these in letters).
 
+**Tags are what counts.** When the agent matches a posting, or the app checks a cover letter, a bullet supports a skill only if the skill is one of its tags. The app never assumes one term means another: a bullet tagged `api-integration` doesn't count as REST or JSON experience, because plenty of API work isn't. If it is for you, either add the tags to that bullet (`tags: [api-integration, rest-api, json]`), or, when it's true for every bullet with a tag, say so once in `user.yaml`:
+
+```yaml
+implied_tags:
+  api-integration: [rest-api, json]   # every bullet tagged api-integration also counts as rest-api and json
+```
+
+That setting changes only matching and checks; `base.yaml` stays as you wrote it. Check every bullet with the tag first: a rule like this also covers, say, an integration you built against a vendor's Java library.
+
 You can confirm an item from the command line too: `rb confirm <id>`. Bullets, summary phrases, education, certifications and skill groups have a status. Roles and projects don't: a role or project shows on a resume once a profile picks one of its confirmed bullets, so confirm the bullets (giving a role's id to `rb confirm` lists its draft bullets). Example entries (`example-`) can't be confirmed; replace them.
 
 To confirm everything at once, run `rb confirm --all`. It lists every draft bullet, summary phrase, education, certification and skill group, then asks you to type `yes` before changing anything; any other answer leaves everything as it was. Only items on that list are confirmed, so nothing added in the meantime slips through. Use it after you've reviewed the whole library, for example right after importing your resume, not as a shortcut past checking. Add `--yes` to skip the question in a script.

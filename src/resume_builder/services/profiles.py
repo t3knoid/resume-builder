@@ -34,7 +34,7 @@ def profile_write(space: UserSpace, ctx: RequestContext, data: ProfileWriteIn) -
     if data.key != "public" and not space.repo.application_row(data.key):
         raise NotFound(f"No job `{data.key}`.")
     rel = "profiles/public.yaml" if data.key == "public" else f"jobs/{data.key}/profile.yaml"
-    lib = space.repo.load_library()
+    lib = space.matching_library()  # keywords may be tags a bullet's tags imply (user.yaml implied_tags)
     profile = roles_newest_first(data.profile, lib)  # the order of the user's history, whatever order the caller sent
     problems = validate_profile(profile, lib, rel, space.repo.archived_ids())
     if any(p.severity == "error" for p in problems):
@@ -198,7 +198,7 @@ def agent_brief(space: UserSpace, ctx: RequestContext, data: BriefIn) -> str:
     if not row:
         raise NotFound(f"No job `{data.job_id}`.")
     app = space.repo.get_application(data.job_id)
-    lib = space.repo.load_library()
+    lib = space.matching_library()  # tags shown include those the user's implied_tags add
     s = space.user_settings
     lines = [
         f"# Agent brief: {data.job_id}",
@@ -207,6 +207,9 @@ def agent_brief(space: UserSpace, ctx: RequestContext, data: BriefIn) -> str:
         "This user's limits:",
         f"- Answers: at most {s.writing.answer_max_words} words. Cover letters: {s.writing.cover_letter_min_words}–{s.writing.cover_letter_max_words} words.",
         "- Banned phrases: " + ", ".join(f'"{p}"' for p in s.writing.banned_phrases) + ".",
+        *([("- Tags this user says stand for more (already added to the bullets' tags below): "
+            + "; ".join(f"{k} also means {', '.join(v)}" for k, v in s.implied_tags.items()) + ".")]
+          if s.implied_tags else []),
         "",
         _HOW_TO_SUBMIT[data.mode](space.user, data.job_id),
         "## Job",

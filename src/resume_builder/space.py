@@ -82,6 +82,10 @@ class UserSpace:
             return UserSettings(display_name=self.user)
         return s
 
+    def matching_library(self):
+        """The content library as matching and checks see it: tags plus the `implied_tags` in user.yaml."""
+        return self.repo.load_library().with_implied_tags(self.user_settings.implied_tags)
+
     # ------------------------------------------------------------ audit and backups
     def audit(self, ctx: RequestContext, operation: str, target: str = "", result: str = "ok") -> None:
         self.repo.audit(ctx.actor, ctx.channel, ctx.request_id, operation, target, result)

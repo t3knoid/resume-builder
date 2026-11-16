@@ -34,3 +34,4 @@ intake:
 publish:
   enabled: false
   target: null
+implied_tags: {}

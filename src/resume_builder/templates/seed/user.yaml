@@ -51,3 +51,7 @@ intake:                                # Starting a job from its posting link (r
 publish:
   enabled: false                       # true when you want a public resume site from profiles/public.yaml.
   target: null                         # Where it goes, e.g. "github.com/you/you.github.io". Informational for now.
+
+implied_tags: {}                       # Tags that stand for more, e.g. {api-integration: [rest-api, json]}: a bullet tagged
+                                       # api-integration then also counts as rest-api and json when matching postings and
+                                       # checking letters. Only add what's true for all your bullets with that tag.

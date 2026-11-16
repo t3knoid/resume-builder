@@ -47,7 +47,7 @@ def split_sentences(text: str) -> list[tuple[str, list[str]]]:
 
 
 def _terms(space: UserSpace) -> set[str]:
-    lib = space.repo.load_library()
+    lib = space.matching_library()
     terms = {t.replace("-", " ") for t in lib.all_tags()} | {t for t in lib.all_tags()}
     for g in lib.skills:
         terms |= {i.lower() for i in g.items}
@@ -66,7 +66,7 @@ def check_document(space: UserSpace, job_id: str, kind: str, text: str, owner_ed
     profile = space.repo.get_profile(job_id)
     if profile is None:
         return [Problem("Tailor the resume first: this job has no profile yet, and letters may only use its content.", file=rel, severity=sev)]
-    lib = space.repo.load_library()
+    lib = space.matching_library()  # a cited bullet's tags include the ones user.yaml says they imply
     bullets = lib.all_bullets()
     phrases = {s.id: s for s in lib.summary_phrases}
     allowed = profile.bullet_ids() | set(profile.summary)  # earlier experience is on the resume too

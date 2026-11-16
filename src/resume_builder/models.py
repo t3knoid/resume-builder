@@ -112,6 +112,10 @@ class UserSettings(Strict):
     backups: BackupSettings = Field(default_factory=BackupSettings)
     intake: IntakeSettings = Field(default_factory=IntakeSettings)
     publish: PublishSettings = Field(default_factory=PublishSettings)
+    implied_tags: dict[Slug, list[Slug]] = Field(
+        default_factory=dict, max_length=200,
+        description="Tags that stand for more: a bullet tagged with the key also counts as having each tag in the list, "
+                    "for matching postings and checking letters. Only you declare these. e.g. api-integration: [rest-api, json]")
 
 
 # ---------------------------------------------------------------- base.yaml
@@ -220,6 +224,32 @@ class ContentLibrary(Strict):
         ids += [e.id for e in self.education] + [c.id for c in self.certifications] + [s.id for s in self.skills]
         ids += list(self.all_bullets().keys())
         return ids
+
+    def with_implied_tags(self, implied: dict[str, list[str]]) -> "ContentLibrary":
+        """A copy where every bullet and summary phrase also carries the tags its own tags imply.
+
+        `implied` is `user.yaml`'s `implied_tags`; it follows chains (a -> b -> c). Used only for
+        matching and checks; the stored library and base.yaml never change.
+        """
+        if not implied:
+            return self
+
+        def expand(tags: list[str]) -> list[str]:
+            out = list(tags)
+            for tag in out:  # grows while it runs: follows chains, each tag once
+                for extra in implied.get(tag, ()):
+                    if extra not in out:
+                        out.append(extra)
+            return out
+
+        data = self.model_dump(mode="json")
+        for group in ("roles", "projects"):
+            for item in data[group]:
+                for b in item["bullets"]:
+                    b["tags"] = expand(b["tags"])
+        for s in data["summary_phrases"]:
+            s["tags"] = expand(s["tags"])
+        return ContentLibrary.model_validate(data)
 
     def all_tags(self) -> set[str]:
         tags: set[str] = set()
