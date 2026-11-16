@@ -201,7 +201,7 @@ These rules apply to every write, whether it arrives through YAML sync (section 
 | R4.1 | Every referenced id exists and is `confirmed`. |
 | R4.2 | Every keyword the profile claims maps to a tag in the content library. |
 | R4.3 | A profile contains no free text, except in `gaps`. |
-| R4.4 | Roles stay in chronological order, under `roles` and under `earlier_roles` (R3.4). A role is left out only if it is listed in `omitted_roles` with a reason. |
+| R4.4 | Roles stay in chronological order, newest first, under `roles` and under `earlier_roles` (R3.4). The app sets that order itself from each role's start date when a profile is saved or rendered, rather than relying on the order the keys arrive in, which JSON doesn't guarantee (some agent clients sort them); roles with the same start keep the order given. The working copy is written back in that order. A role is left out only if it is listed in `omitted_roles` with a reason. |
 | R4.5 | Each application matches its schema, its event dates run in order, and its status transitions are allowed (section 8.6). |
 
 ### 8.5 Rendering

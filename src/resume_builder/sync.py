@@ -37,6 +37,8 @@ from .validation import (
 _MISSING = object()
 
 DOC_FILES = {"fit-report.md": ("fit_report", ""), "cover-letter.md": ("cover_letter", "")}
+# A profile's mappings whose key order is data: the order shown on the resume.
+PROFILE_ORDERED = ("roles", "projects", "earlier_roles")
 DEFAULT_QUESTIONS = {"why-here": "Why do you want to work here?"}
 
 
@@ -152,7 +154,7 @@ def write_back_all(space: UserSpace, what: str, key: str | None = None) -> bool:
     if what == "profile":
         data = export_profile(space, key)
         rel = "profiles/public.yaml" if key == "public" else f"jobs/{key}/profile.yaml"
-        return bool(data) and space.write_back_yaml(rel, data, "profile.yaml")
+        return bool(data) and space.write_back_yaml(rel, data, "profile.yaml", ordered=PROFILE_ORDERED)
     if what == "application":
         data = export_application(space, key)
         if not data:
@@ -370,9 +372,17 @@ def _sync_yaml(space: UserSpace, ctx, rel, path: Path, row, check_only, ensure_b
         return FileResult(rel, "failed", [Problem(f"The database rejected this change: {exc}.", file=rel)])
 
     merged_plain = merged_model.model_dump(mode="json")
-    if merged_plain != file_plain:
+    ordered: tuple[str, ...] = ()
+    if kind == "profile":
+        # The operation may have reordered roles newest first: show what was stored. Dict equality
+        # ignores order, so compare the order too.
+        merged_plain, ordered = _export(space, kind, key), PROFILE_ORDERED
+        changed = json.dumps(merged_plain) != json.dumps(file_plain)
+    else:
+        changed = merged_plain != file_plain
+    if changed:
         space.write_back_yaml(rel, merged_plain, force=True,
-                              file_plain=tidy_application(merged_plain) if kind == "application" else None)
+                              file_plain=tidy_application(merged_plain) if kind == "application" else None, ordered=ordered)
     else:
         space.repo.put_sync_file(rel, file_hash(path), merged_plain, "applied", [p.to_dict() for p in problems], version)
     return FileResult(rel, "applied", problems)

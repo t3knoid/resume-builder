@@ -121,7 +121,7 @@ class UserSpace:
         return p
 
     def write_back_yaml(self, rel: str, plain: dict, template: str | None = None, force: bool = False,
-                        file_plain: dict | None = None) -> bool:
+                        file_plain: dict | None = None, ordered: tuple[str, ...] = ()) -> bool:
         """Write current data back to a YAML file (R7.12) unless the user has unsynced edits there.
 
         Returns True if the file was written. When the user has pending edits, the next sync
@@ -130,7 +130,8 @@ class UserSpace:
         p = self.path(rel)
         if not force and not self._safe_to_write(rel, p):
             return False
-        yamlio.write_yaml(p, file_plain if file_plain is not None else plain, template_text=self._template_text(template, rel))
+        yamlio.write_yaml(p, file_plain if file_plain is not None else plain, template_text=self._template_text(template, rel),
+                          ordered=ordered)
         self.repo.put_sync_file(rel, file_hash(p), plain, "applied", [])
         return True
 

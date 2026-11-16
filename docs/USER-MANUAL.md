@@ -650,7 +650,7 @@ Rules the app enforces:
 
 - Every id must exist. Drafts are allowed in a preview only.
 - No text of its own except under `gaps`.
-- Roles newest first. Every role is either under `roles`, condensed under `earlier_roles`, or in `omitted_roles` with a reason, so there's no unexplained gap in your history.
+- Roles newest first. You don't have to get this right: the app orders `roles` and `earlier_roles` by their start dates when the profile is saved, and rewrites `profile.yaml` in that order. Every role is either under `roles`, condensed under `earlier_roles`, or in `omitted_roles` with a reason, so there's no unexplained gap in your history.
 - `keywords` must be tags on your bullets.
 
 **Earlier roles.** Roles under `earlier_roles` appear after the others as one compact "Earlier Experience" entry: the companies and the overall date span, then each role's title, company and dates on one line, with any bullets you list for it underneath. It uses only those roles' own titles, companies, dates and confirmed bullets, so it adds no new text. They must all be older than the roles under `roles`. Use it to keep a long history visible without giving old jobs full space; AI agents condense older roles this way rather than dropping them.

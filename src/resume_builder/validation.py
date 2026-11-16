@@ -86,6 +86,25 @@ def validate_registry(reg: OrganizationRegistry, rel: str = "organizations.yaml"
 
 # ---------------------------------------------------------------- profiles
 
+def roles_newest_first(profile: Profile, lib: ContentLibrary) -> Profile:
+    """The profile with `roles` and `earlier_roles` in the order of the user's history, newest first (R4.4).
+
+    The library knows each role's dates, so the app sets this order itself instead of trusting the
+    order of a mapping's keys, which JSON doesn't guarantee (some clients sort them). Roles with the
+    same start keep the order they were given; ids not in the library stay last, for the check to report.
+    """
+    starts = {r.id: r.start for r in lib.roles}
+
+    def ordered(group: dict) -> dict:
+        known = sorted((r for r in group if r in starts), key=lambda r: starts[r], reverse=True)
+        return {r: group[r] for r in known + [r for r in group if r not in starts]}
+
+    roles, earlier = ordered(profile.roles), ordered(profile.earlier_roles)
+    if list(roles) == list(profile.roles) and list(earlier) == list(profile.earlier_roles):
+        return profile
+    return profile.model_copy(update={"roles": roles, "earlier_roles": earlier})
+
+
 def validate_profile(profile: Profile, lib: ContentLibrary, rel: str, archived: set[str] | None = None) -> list[Problem]:
     """R4.1–R4.4. Referencing a draft is a warning here and an error at final render (R2.3)."""
     problems: list[Problem] = []
@@ -158,11 +177,7 @@ def validate_profile(profile: Profile, lib: ContentLibrary, rel: str, archived: 
             elif bullets[bid].status != "confirmed":
                 draft(bid, "Bullet", f"earlier_roles.{role_id}")
 
-    # R4.4: roles in chronological order (newest first), and none dropped silently.
-    for group, field in ((profile.roles, "roles"), (profile.earlier_roles, "earlier_roles")):
-        starts = [roles[r].start for r in group if r in roles]
-        if starts != sorted(starts, reverse=True):
-            problems.append(Problem("Roles must be listed newest first, the same order as your history.", file=rel, field=field))
+    # R4.4: the app puts roles newest first itself (roles_newest_first); none may be dropped silently.
     if profile.roles and profile.earlier_roles:
         newest_earlier = max((roles[r].start for r in profile.earlier_roles if r in roles), default="")
         oldest_main = min((roles[r].start for r in profile.roles if r in roles), default="9999")

@@ -9,7 +9,7 @@ from ..models import Profile
 from ..operations import operation
 from ..security import RequestContext
 from ..space import UserSpace
-from ..validation import validate_profile
+from ..validation import roles_newest_first, validate_profile
 
 
 class ProfileKeyIn(BaseModel):
@@ -34,11 +34,13 @@ def profile_write(space: UserSpace, ctx: RequestContext, data: ProfileWriteIn) -
     if data.key != "public" and not space.repo.application_row(data.key):
         raise NotFound(f"No job `{data.key}`.")
     rel = "profiles/public.yaml" if data.key == "public" else f"jobs/{data.key}/profile.yaml"
-    problems = validate_profile(data.profile, space.repo.load_library(), rel, space.repo.archived_ids())
+    lib = space.repo.load_library()
+    profile = roles_newest_first(data.profile, lib)  # the order of the user's history, whatever order the caller sent
+    problems = validate_profile(profile, lib, rel, space.repo.archived_ids())
     if any(p.severity == "error" for p in problems):
         raise ValidationFailed("The profile doesn't match the content library.", problems)
     with space.repo.transaction():
-        space.repo.save_profile(data.key, data.profile, ctx.actor)
+        space.repo.save_profile(data.key, profile, ctx.actor)
     written = space.changed("profile", data.key)
     _flag_outdated_documents(space, data.key)
     return {"saved": data.key, "warnings": [p.to_dict() for p in problems if p.severity == "warning"], "file_updated": written}
@@ -64,7 +66,7 @@ order content they already have; you never write new claims about them.
 Rules (non-negotiable; the app rejects drafts that break them):
 - Never invent experience, tools, metrics, dates, titles or outcomes. Use only confirmed items from
   the user's content library, referenced by id.
-- A profile lists ids only, in order. No new resume text. Roles newest first. Put recent, relevant
+- A profile lists ids only, in order. No new resume text. The app puts roles newest first by their dates. Put recent, relevant
   roles under `roles`. Condense older or less relevant roles under `earlier_roles` (role id -> [] or a
   few bullet ids) instead of dropping them, so the work history has no gap. Use `omitted_roles`, with
   a reason, only when the user asks to leave a role out. `keywords` must be tags on the user's bullets.

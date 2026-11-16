@@ -180,13 +180,21 @@ def _to_yaml_value(value: Any) -> Any:
     return value
 
 
-def deep_update(node: Any, new: Any) -> Any:
-    """Update a round-trip node in place so comments and order survive (R10.15)."""
+def deep_update(node: Any, new: Any, ordered: tuple[str, ...] | frozenset = ()) -> Any:
+    """Update a round-trip node in place so comments and order survive (R10.15).
+
+    `ordered` names top-level keys whose mapping's key order is data (a profile's `roles`): those
+    follow the new data's order. Every other mapping keeps the file's own key order.
+    """
     if isinstance(node, CommentedMap) and isinstance(new, dict):
         for key in [k for k in node.keys() if k not in new]:
             del node[key]
         for key, value in new.items():
-            if key in node and isinstance(node[key], (CommentedMap, CommentedSeq)) and isinstance(value, (dict, list)):
+            if key in ordered and key in node and isinstance(node[key], CommentedMap) and isinstance(value, dict):
+                node[key] = deep_update(node[key], value)
+                for k in value:  # same keys, possibly another order: follow the data
+                    node[key].move_to_end(k)
+            elif key in node and isinstance(node[key], (CommentedMap, CommentedSeq)) and isinstance(value, (dict, list)):
                 node[key] = deep_update(node[key], value)
             elif key in node and to_plain(node[key]) == value:
                 continue
@@ -214,8 +222,10 @@ def dump_yaml(doc: Any) -> str:
     return buf.getvalue()
 
 
-def write_yaml(path: Path, plain: dict, template_text: str | None = None) -> str:
-    """Write plain data into a YAML file, keeping the existing file's (or the template's) comments."""
+def write_yaml(path: Path, plain: dict, template_text: str | None = None, ordered: tuple[str, ...] = ()) -> str:
+    """Write plain data into a YAML file, keeping the existing file's (or the template's) comments.
+
+    `ordered`: top-level keys whose mapping order is data (see `deep_update`)."""
     doc = None
     if path.exists():
         text, _ = read_text_safely(path, path.name)
@@ -228,7 +238,7 @@ def write_yaml(path: Path, plain: dict, template_text: str | None = None) -> str
         doc = _yaml().load(template_text)
     if not isinstance(doc, CommentedMap):
         doc = CommentedMap()
-    deep_update(doc, plain)
+    deep_update(doc, plain, ordered)
     out = dump_yaml(doc)
     if template_text and not path.exists():
         header = _leading_comment_block(template_text)

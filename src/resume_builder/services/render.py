@@ -158,6 +158,9 @@ def _person(s: UserSettings) -> dict:
 
 def resolve_resume(lib: ContentLibrary, profile: Profile, preview: bool) -> tuple[dict, list[str], list[str]]:
     """Profile ids -> final text, in order. Returns (sections, bullet ids, drafts used)."""
+    from ..validation import roles_newest_first
+
+    profile = roles_newest_first(profile, lib)
     drafts: list[str] = []
 
     def ok(item) -> bool:
