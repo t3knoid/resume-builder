@@ -66,7 +66,7 @@ class RequestContext:
     actor: str
     roles: tuple[str, ...]
     user_id: str
-    channel: str = "cli"  # cli | api | yaml-sync | bootstrap | web | mcp
+    channel: str = "cli"  # cli | api | yaml-sync | bootstrap | web | mcp | mcp-http
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     tenant_id: str = LOCAL_TENANT
 
