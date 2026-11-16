@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -115,7 +114,11 @@ class RestoreIn(BaseModel):
 
 @operation("restore", "data:restore", RestoreIn, "Restore the database from a backup (backs up the current one first).", writes=True)
 def restore_op(space: UserSpace, ctx: RequestContext, data: RestoreIn) -> dict:
-    name = Path(data.file).name
+    # Typed as the host sees it too (`.\backups\<user>\app-....db`): split on either slash.
+    parts = [p for p in data.file.strip().replace("\\", "/").split("/") if p]
+    name = parts[-1] if parts else ""
+    if len(parts) > 1 and parts[-2] not in (space.user, "backups"):
+        raise NotFound(f"`{data.file}` isn't in your backups folder. Run `rb backups` to list them.")
     if name not in space.backup_names():
         raise NotFound(f"No backup `{data.file}` in {space.backups.location('')}. Run `rb backups` to list them.")
     before = space.backup("pre-restore")

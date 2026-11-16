@@ -234,9 +234,11 @@ class ResolveIn(BaseModel):
 
 @operation("resolve", "space:sync", ResolveIn, "Resolve a sync conflict by keeping the file's or the app's version.", writes=True)
 def resolve_op(space: UserSpace, ctx: RequestContext, data: ResolveIn) -> dict:
-    if not (space.data_dir / data.file).exists():
-        raise NotFound(f"`{data.file}` doesn't exist in your folder.")
-    return sync_mod.run_sync(space, ctx, prefer={data.file: data.keep}).to_dict()
+    rel = user_rel(data.file, space.user, f"`{data.file}` isn't a file in your folder. "
+                                          "Example: jobs/<job-id>/application.yaml (as `rb status` lists it)")
+    if not (space.data_dir / rel).exists():
+        raise NotFound(f"`{rel}` doesn't exist in your folder. `rb status` lists the files with conflicts.")
+    return sync_mod.run_sync(space, ctx, prefer={rel: data.keep}).to_dict()
 
 
 @operation("export_files", "space:sync", Empty, "Rewrite missing working-copy files from the database.", writes=True)
@@ -320,21 +322,34 @@ class IntakeFileIn(BaseModel):
     url: str | None = Field(None, description="The posting's link, recorded as its link (not fetched)")
 
 
-def intake_rel(name: str, user: str | None = None) -> str:
-    """`intake/<name>` for a file named relative to the user's folder or to the intake folder.
-    A path as the host sees it (`.\\data\\<user>\\intake\\resume.pdf`, or an absolute one) is accepted
-    too when it names this user's intake folder: the part after `<user>/intake/` is used."""
+def user_rel(name: str, user: str | None, problem: str) -> str:
+    """A file named by the user, as a POSIX path relative to their folder.
+
+    `rb` runs in the container, but people type paths as their computer sees them: with backslashes,
+    from the repo folder (`.\\data\\<user>\\jobs\\...`) or in full (`C:\\...\\data\\<user>\\...`). Such a
+    path is accepted when it goes through this user's folder: the part after the last `<user>/` is used.
+    Anything else absolute, or with `..`, is refused with `problem`."""
     rel = name.strip().replace("\\", "/")
     while rel.startswith("./"):
         rel = rel[2:]
     parts = rel.split("/")
     if user:
-        for i in range(1, len(parts) - 1):
-            if parts[i] == INTAKE_DIR and parts[i - 1] == user:
-                rel = "/".join(parts[i:])
+        for i in range(len(parts) - 2, -1, -1):
+            if parts[i] == user:          # inside this user's folder: keep what follows it
+                parts = parts[i + 1:]
                 break
-    if not rel or rel.startswith("/") or ":" in rel.split("/", 1)[0] or ".." in rel.split("/"):
-        raise ValidationFailed(f"`{name}` isn't a file in your intake folder. Example: intake/acme-sre.txt")
+    if not parts or parts[0] == "" or ":" in parts[0] or ".." in parts:   # absolute, a drive, or climbing out
+        raise ValidationFailed(problem)
+    rel = "/".join(p for p in parts if p not in ("", "."))
+    if not rel:
+        raise ValidationFailed(problem)
+    return rel
+
+
+def intake_rel(name: str, user: str | None = None) -> str:
+    """`intake/<name>` for a file named relative to the user's folder or to the intake folder
+    (or by a host path into this user's intake folder, see `user_rel`)."""
+    rel = user_rel(name, user, f"`{name}` isn't a file in your intake folder. Example: intake/acme-sre.txt")
     return rel if rel.startswith(INTAKE_DIR + "/") else f"{INTAKE_DIR}/{rel}"
 
 
