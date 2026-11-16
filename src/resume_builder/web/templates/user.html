@@ -20,14 +20,9 @@
   <h2>AI agent <a class="help-link" href="/help/ai-agents#step-4-verify-your-assistant" target="rb-help" data-help title="Help: verify your assistant">?</a></h2>
   {% if agent.state == "connected" %}
     <p class="ok">Connected through {{ {"mcp": "MCP", "mcp-http": "MCP over HTTP", "api": "the HTTP API"}.get(agent.direct_channel, agent.direct_channel) }}, last on {{ agent.direct_active }}.{% if agent.last_channel == "cli" %} Most recently used through copy and paste ({{ agent.last_active }}).{% endif %}</p>
-  {% elif agent.state == "copy_and_paste" %}
-    <p class="stale">Used through copy and paste (<code>rb propose</code>), last on {{ agent.last_active }}. No assistant has connected directly.</p>
-  {% elif agent.state == "token_unused" %}
-    <p class="stale">An agent token was issued on {{ agent.channels.api.token_issued[:10] }} but hasn't been used yet.</p>
-  {% else %}
-    <p class="muted">No AI agent has connected yet.</p>
   {% endif %}
-  {% for h in agent.hints %}<p class="{{ 'bad' if 'no longer valid' in h else 'muted' }}">{{ h }}</p>{% endfor %}
+  {#- Otherwise the first hint states the state, with its details (agent_status). -#}
+  {% for h in agent.hints %}<p class="{{ 'bad' if 'no longer valid' in h else ('stale' if loop.first and agent.state in ('copy_and_paste', 'token_unused') else 'muted') }}">{{ h }}</p>{% endfor %}
   <table>
     <tr><th>Channel</th><th>Last active</th><th></th></tr>
     <tr><td>MCP</td><td>{{ agent.channels.mcp.last_seen or "never" }}</td><td class="muted">{% if agent.channels.mcp.client %}{{ agent.channels.mcp.client }}{% endif %}</td></tr>

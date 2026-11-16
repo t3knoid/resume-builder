@@ -53,7 +53,7 @@ def test_not_set_up(sample, owner, client):
     s = status(sample, owner)
     assert s["state"] == "not_set_up" and s["last_active"] is None
     assert any("No AI agent has connected yet" in h for h in s["hints"])
-    assert "No AI agent has connected yet." in home(client)
+    assert home(client).count("No AI agent has connected yet.") == 1      # stated once, not twice
 
 
 def test_token_issued_but_not_used(sample, owner, client):
@@ -61,7 +61,8 @@ def test_token_issued_but_not_used(sample, owner, client):
     s = status(sample, owner)
     assert s["state"] == "token_unused" and s["channels"]["api"]["token_used"] is False
     page = home(client)
-    assert "hasn't been used yet" in page
+    assert page.count("been used yet") == 1                   # the page escapes the apostrophe
+    assert f"issued on {s['channels']['api']['token_issued'][:10]}" in page
     for text in (json.dumps(s), page):
         assert token not in text                      # the token itself is never shown
 
@@ -99,7 +100,8 @@ def test_copy_and_paste_alone_is_not_connected(sample, owner, client, monkeypatc
     assert s["direct_channel"] is None
     assert any("no assistant has connected directly" in h for h in s["hints"])
     page = home(client)
-    assert "Used through copy and paste" in page and "Connected through" not in page
+    assert page.count("Used through copy and paste") == 1 and "Connected through" not in page
+    assert page.count("no assistant has connected directly") == 1
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert main(["--user", USER, "status"]) == 0
     assert '"state": "copy_and_paste"' in capsys.readouterr().out

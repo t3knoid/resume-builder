@@ -134,15 +134,20 @@ def agent_status(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
                        "job_id": target if space.repo.application_row(target) else None})
         if len(recent) == RECENT:
             break
+    # The first hint states the agent's state with its details, so the website shows it as is
+    # (one sentence, not a state line plus a hint repeating it).
     hints = []
     if s["state"] == "not_set_up":
         hints.append("No AI agent has connected yet. Set one up with AI-AGENTS.md (MCP: `rb mcp`; HTTP API: "
                      "`rb token --actor agent`), then ask it to call `agent_brief`. This updates when it does.")
     elif s["state"] == "token_unused":
-        hints.append("An agent token was issued but hasn't been used yet. Put it in your AI tool's settings (AI-AGENTS.md).")
+        issued = f" on {s['token_issued'][:10]}" if s["token_issued"] else ""
+        hints.append(f"An agent token was issued{issued} but hasn't been used yet. "
+                     "Put it in your AI tool's settings (AI-AGENTS.md).")
     elif s["state"] == "copy_and_paste":
-        hints.append("You've pasted drafts from a chat assistant with `rb propose`, but no assistant has connected directly. "
-                     "To let one use resume-builder's tools itself, set it up with AI-AGENTS.md (MCP or the HTTP API).")
+        hints.append(f"Used through copy and paste (`rb propose`), last on {s['last_active']}, but no assistant has "
+                     "connected directly. To let one use resume-builder's tools itself, set it up with AI-AGENTS.md "
+                     "(MCP or the HTTP API).")
     if s["stale_token"]:
         hints.append("Your assistant used an API token that's no longer valid (it was replaced). "
                      "Issue a new one with `rb token --actor agent` and update your AI tool.")
