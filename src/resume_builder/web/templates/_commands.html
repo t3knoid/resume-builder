@@ -1,0 +1,10 @@
+{# Copy-ready rb commands (issue #36). `c` is {"lines": [{"label", "text"}], "note"} from api.shown(). #}
+{% macro command(c) -%}
+<div class="cmd">{% for l in c.lines %}<div class="cmd-line">{% if l.label %}<span class="code-label">{{ l.label }}</span> {% endif %}<code>{{ l.text }}</code><button type="button" class="copy" data-copy="{{ l.text }}" hidden>Copy</button></div>{% endfor %}{% if c.note %}<div class="muted cmd-note">{{ c.note }}</div>{% endif %}</div>
+{%- endmacro %}
+
+{% macro next_steps(steps, user) -%}
+{% if steps %}<ol class="steps">{% for s in steps %}<li><p>{{ s.text }}{% if s.file %} <span class="muted">File: <code>{{ s.file }}</code></span>{% endif %}</p>
+{% for c in s.commands %}{{ command(c) }}{% endfor %}</li>{% endfor %}</ol>
+{% else %}<p class="muted">Nothing to do for this job right now.</p>{% endif %}
+{%- endmacro %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_commands.html" import command, next_steps %}
+{% block title %}Commands · {{ user }}{% endblock %}
+{% block body %}
+<h1>Commands <a class="help-link" href="/help/user-manual#the-commands-page" target="rb-help" data-help title="Help: the Commands page">?</a></h1>
+<p class="muted">Copy a command and run it in a terminal in your resume-builder folder. Replace anything in <code>&lt;angle brackets&gt;</code> first.{% if user_flag %} These include <code>--user {{ user_flag }}</code> because <code>{{ user_flag }}</code> isn't your default user.{% endif %}</p>
+{% if jobs %}<form method="get" class="filters card"><label>Fill in commands for job
+<select name="job">{% for j in jobs %}<option value="{{ j.job_id }}"{% if j.job_id == job %} selected{% endif %}>{{ j.job_id }}{% if j.title %} · {{ j.title }}{% endif %}</option>{% endfor %}
+{% if job and job not in jobs | map(attribute="job_id") | list %}<option value="{{ job }}" selected>{{ job }}</option>{% endif %}</select></label>
+<button>Show</button></form>
+{% else %}<p class="muted">No open jobs yet, so job commands show <code>&lt;job-id&gt;</code>. Add one with <code>rb new-job</code>.</p>{% endif %}
+{% if job %}<div class="card"><h2>Next for <a href="/u/{{ user }}/jobs/{{ job }}">{{ job }}</a></h2>{{ next_steps(steps, user) }}</div>{% endif %}
+{% for g in groups %}<div class="card"><h2>{{ g.title }}</h2>
+{% for c in g.commands %}{{ command(c) }}{% endfor %}
+</div>{% endfor %}
+{% endblock %}

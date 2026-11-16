@@ -129,6 +129,16 @@ Follow the setup section for your assistant. It adds resume-builder to the assis
 
 Every MCP setup gives the assistant the same command to start resume-builder; it's explained, and tested, in [step 4](#step-4-verify-your-assistant). These parts are the same for every assistant:
 
+**Command or URL?** An MCP assistant can reach resume-builder in one of two ways. Both give it the same tools and checks:
+
+| | Connect with a command (stdio) | Connect with a URL (MCP over HTTP) |
+| --- | --- | --- |
+| What the assistant is given | `docker compose -f .../compose.yaml run --rm -T app rb mcp` | `http://localhost:8000/mcp/<you>` and an agent token |
+| Needs the tracker running | No: it starts resume-builder for each session | Yes: `docker compose up -d` |
+| Works with | Every MCP assistant | Assistants on your computer that support HTTP servers: Claude Code, GitHub Copilot in VS Code, Gemini CLI (others: see their docs) |
+
+For a URL you need an agent token: `rb token --actor agent` prints it once (running it again replaces it). The token goes in your assistant's settings: it only lets the assistant do what the agent may do, and you can replace it any time. The URL works only on this computer, for assistants that run on it. **Don't** enter it under **Settings → Connectors → Add custom connector** in Claude (desktop app or claude.ai) or in ChatGPT: those connectors run on the provider's servers and ask for a public `https://` address, which resume-builder deliberately doesn't have. In Claude Desktop, use the config file instead (its section below).
+
 **a. A working folder outside resume-builder.** Coding assistants (Claude Code, Gemini CLI, Codex CLI, Copilot agent mode) can also edit files. If one edits files in `data/<you>/` directly, the change syncs as **yours**, skipping the agent's checks. So start the assistant in a **separate, empty folder**, never inside resume-builder or your data folder.
 
 **b. Standing instructions (optional, recommended).** `rb agent-instructions` prints the rules every assistant should follow. MCP assistants also receive them automatically when they connect, but saving them in the file your assistant reads keeps long sessions on track:
@@ -176,6 +186,18 @@ The last word is what you pasted: `profile`, `fit_report`, `cover_letter` or `an
    Run it, and it prints a "ready" line, for example `resume-builder MCP server for you ready (27 tools).`, and then **doesn't return to the prompt**: that's expected, it's a server waiting for an assistant to talk to it. Check that the name is your user folder. To see it answer, paste `{"jsonrpc":"2.0","id":1,"method":"ping"}` and press Enter: it replies `{"jsonrpc": "2.0", "id": 1, "result": {}}`.
 
    Then press **Ctrl+C** to stop it. This is only a test; don't leave it running. If it fails here, fix that first: the assistant can't do better than this command.
+
+   **Connecting with a URL?** Test it instead with the tracker running (with your own name and agent token). It answers `{"jsonrpc":"2.0","id":1,"result":{}}`:
+
+   ```sh
+   curl -s http://localhost:8000/mcp/<you> -H "Authorization: Bearer <agent token>" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'          # macOS, Linux
+   ```
+
+   ```powershell
+   Invoke-RestMethod -Method Post -Uri http://localhost:8000/mcp/<you> -Headers @{ Authorization = "Bearer <agent token>" } -ContentType "application/json" -Body '{"jsonrpc":"2.0","id":1,"method":"ping"}'   # Windows PowerShell
+   ```
+
+   `401` means the token is missing, wrong or replaced: issue a new one with `rb token --actor agent`.
 
 2. **Check the tools in your assistant.** Most terminal assistants have `/mcp`, which should list resume-builder as connected, with its tools; desktop apps show them in their tools menu. Your assistant's section says where.
 
@@ -233,7 +255,15 @@ Use the following equivalent in Windows Powershell.
    claude mcp add resume-builder -- docker compose -f C:\Users\you\resume-builder\compose.yaml run --rm -T app rb mcp
    ```
 
-   It prints `Added stdio MCP server resume-builder ...`. If you don't see that line, nothing was saved: fix the error it printed and run it again. Check it with `claude mcp list` (in the same folder): resume-builder should be listed as `Connected`.
+   **Or connect with a URL** (the tracker must be running; see [section 2, step 3](#step-3-connect-your-assistant)), with your own name and agent token:
+
+   ```sh
+   claude mcp add --transport http resume-builder http://localhost:8000/mcp/<you> --header "Authorization: Bearer <agent token>"
+   ```
+
+   The same line works in Windows PowerShell. It prints `Added HTTP MCP server resume-builder ...`.
+
+   With the command, it prints `Added stdio MCP server resume-builder ...`. If you don't see that line, nothing was saved: fix the error it printed and run it again. Check it with `claude mcp list` (in the same folder): resume-builder should be listed as `Connected`.
 
    This registers it **for this folder only**: Claude Code shows it when you start `claude` in this folder, not elsewhere (for example, not in an IDE window opened on another folder). Add `--scope user` before the name to make it available everywhere, or `--scope project` to save it in a `.mcp.json` file in this folder. With more than one user folder, add `--user <you>` before `mcp`.
 
@@ -274,6 +304,8 @@ Use the following equivalent in Windows Powershell.
    Claude Code asks permission the first time it uses each tool. Allow the resume-builder ones.
 
 ### Claude Desktop
+
+Claude Desktop runs resume-builder through its **config file** (stdio). Its **Settings → Connectors → Add custom connector** screen is for internet services: it refuses `localhost` addresses ("Claude connects from Anthropic's servers..."), so don't use it for resume-builder.
 
 1. Open Claude Desktop → **Settings** → **Developer** → **Edit Config**. This opens
    `claude_desktop_config.json`:
@@ -378,6 +410,19 @@ Gemini CLI is Google's open-source agent for the terminal. It supports MCP serve
    ```
 
    `timeout` (milliseconds) gives Docker time to start the container on the first call.
+
+   **Or connect with a URL** (the tracker must be running), the same on every system:
+
+   ```json
+   {
+     "mcpServers": {
+       "resume-builder": {
+         "httpUrl": "http://localhost:8000/mcp/<you>",
+         "headers": { "Authorization": "Bearer <agent token>" }
+       }
+     }
+   }
+   ```
 
    On Windows, the `"args"` line uses your Windows path with every backslash doubled:
 
@@ -518,6 +563,20 @@ VS Code's Copilot Chat can use MCP tools in **Agent** mode.
    "args": ["compose", "-f", "C:\\Users\\you\\resume-builder\\compose.yaml", "run", "--rm", "-T", "app", "rb", "mcp"]
    ```
 
+   **Or connect with a URL** (the tracker must be running), the same on every system:
+
+   ```json
+   {
+     "servers": {
+       "resume-builder": {
+         "type": "http",
+         "url": "http://localhost:8000/mcp/<you>",
+         "headers": { "Authorization": "Bearer <agent token>" }
+       }
+     }
+   }
+   ```
+
    (Or run **MCP: Add Server** from the Command Palette, choose a command-based (stdio) server, and
    enter the same command.) If VS Code can't find `docker`, use its full path (section 2, step 4).
 
@@ -568,7 +627,7 @@ documentation for Copilot CLI has the current steps.
 
 ## 7. Other tools
 
-**Any MCP client** (Cursor, Windsurf, Zed, Continue, and others) can use the command in section 2.
+**Any MCP client** (Cursor, Windsurf, Zed, Continue, and others) can use the command in section 2, or, if it supports HTTP servers, the URL `http://localhost:8000/mcp/<you>` with an agent token (`Authorization: Bearer <token>`).
 Most use the same JSON shape as Claude Desktop: `command` plus `args`.
 
 **Your own scripts** can use the HTTP API:
@@ -676,6 +735,8 @@ The agent can't create the job, fill in your `interest_notes`, or add companies.
 | The home page says "No AI agent has connected yet" or "Used through copy and paste" after setup | The assistant hasn't reached resume-builder. For MCP, run the MCP command from section 2 by hand and look for "ready"; then restart the assistant. For the HTTP API, check the token and that the address is `localhost` or `127.0.0.1`. |
 | The home page says the assistant used a token that's "no longer valid" | You replaced the token with `rb token`. Issue a new one with `rb token --actor agent` and update your assistant's settings. |
 | The assistant says the server failed to start or timed out | Run the MCP command by hand (section 2, step 4). If it builds the image, wait for that to finish and try again. Increase the client's timeout if it has one. |
+| Claude says "Claude connects from Anthropic's servers, so it can't reach a local address like this one. Enter a public https:// URL." | You used **Settings → Connectors → Add custom connector**, which only reaches internet services. Don't make resume-builder public. In Claude Desktop use the config file ([Claude Desktop](#claude-desktop)); in Claude Code use `claude mcp add`; in claude.ai use copy and paste. |
+| Connecting with a URL fails, or says `401` | The tracker must be running (`docker compose up -d`). `401`: the agent token is missing, wrong or was replaced; issue a new one with `rb token --actor agent` and update your assistant. `403`: you used the owner's token; MCP needs the agent's. |
 | Claude Code's `/mcp` doesn't list resume-builder | Run `claude mcp list` in your working folder. If resume-builder isn't there, `claude mcp add` didn't save it (it prints `Added stdio MCP server ...` when it does): run it again. If it is there, start `claude` from that same folder; a server added without `--scope user` only shows up there. |
 | `claude mcp add` says `error: unknown option '-f'` (Windows PowerShell) | PowerShell dropped the bare `--`. Quote it: `claude mcp add resume-builder '--' docker compose -f ...` (section 3). |
 | `claude`, `gemini`, `codex` or `copilot`: "command not found" or "is not recognized" | The assistant isn't installed, or its folder isn't on your PATH. See [section 2, step 2](#step-2-install-your-assistant), then open a new terminal. |

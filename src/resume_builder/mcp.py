@@ -68,10 +68,13 @@ def agent_tools(registry: Registry | None = None) -> list[dict]:
 
 
 class McpServer:
-    def __init__(self, app: App, user: str, role: str = "agent"):
+    def __init__(self, app: App, user: str, role: str = "agent", channel: str = "mcp"):
+        """`channel` is how the agent reached the app: `mcp` (stdio, `rb mcp`) or `mcp-http` (the
+        tracker's `/mcp/<user>` endpoint, issue #35). The tools and checks are the same."""
         self.app = app
         self.user = user
         self.role = role
+        self.channel = channel
         self.tools = {t["name"]: t for t in tools_for(app.registry, role)}
 
     def handle(self, msg: dict) -> dict | None:
@@ -110,7 +113,7 @@ class McpServer:
         info = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
         try:
             space = self.app.space(self.user)
-            ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel="mcp",
+            ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel=self.channel,
                                  tenant_id=self.app.tenant_id)
             with space._lock:
                 note_connect(space, ctx, clean_client(info.get("name"), info.get("version")))
@@ -127,7 +130,7 @@ class McpServer:
             if name == "agent_brief":
                 arguments = {"mode": "mcp", **arguments}
             try:
-                ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel="mcp",
+                ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel=self.channel,
                                      tenant_id=self.app.tenant_id)
                 out = invoke(self.app, ctx, name, arguments)
             except AppError as exc:

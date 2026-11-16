@@ -30,6 +30,20 @@ def _print(obj) -> None:
         print(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
 
 
+def _print_steps(steps: list[dict], user: str | None) -> None:
+    from .commands import Command, lines
+    if not steps:
+        print("Nothing to do for this job right now.")
+    for i, step in enumerate(steps, start=1):
+        print(f"{i}. {step['text']}")
+        if step["file"]:
+            print(f"   File: {step['file']}")
+        for c in step["commands"]:
+            for line in lines(Command.from_dict(c), user):
+                print(f"   {line['label'] + ': ' if line['label'] else ''}{line['text']}" + (f"   # {c['note']}" if c["note"] else ""))
+        print()
+
+
 def _ctx(app: App, user: str) -> RequestContext:
     token = os.environ.get("RB_ACTOR_TOKEN")
     if token:
@@ -318,6 +332,8 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--all", action="store_true", help="include archived")
     sh = cmd("show", "Show one application.")
     sh.add_argument("job_id")
+    nx = cmd("next", "What to do next for a job, with the commands to run.")
+    nx.add_argument("job_id")
     e = cmd("event", "Add an event to an application.")
     e.add_argument("job_id")
     e.add_argument("--type", default="stage_change", choices=["stage_change", "interview", "follow_up_sent", "message_received", "note", "document_sent", "correction"])
@@ -532,6 +548,8 @@ def _run(app: App, args) -> int | None:
             print("No applications yet. Start one with: rb new-job")
     elif c == "show":
         _print(op("job_get", {"job_id": args.job_id}))
+    elif c == "next":
+        _print_steps(op("job_next_steps", {"job_id": args.job_id}), args.user)
     elif c == "event":
         ev = {"date": args.date or date.today().isoformat(), "type": args.type, "stage": args.stage,
               "notes": args.notes, "contact": args.contact, "documents": args.documents, "corrects": args.corrects}

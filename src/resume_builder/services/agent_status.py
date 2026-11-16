@@ -25,7 +25,8 @@ from ..operations import operation
 from ..security import RequestContext
 from ..space import UserSpace
 
-CHANNELS = ("mcp", "api", "cli")
+CHANNELS = ("mcp", "mcp-http", "api", "cli")
+DIRECT_CHANNELS = ("mcp", "mcp-http", "api")   # an assistant reached the app itself, not a pasted draft
 SEEN_EVERY = timedelta(minutes=1)
 CONNECT_EVERY = timedelta(hours=1)
 REFUSED_EVERY = timedelta(minutes=10)
@@ -64,11 +65,13 @@ def note_seen(space: UserSpace, channel: str) -> None:
 
 def note_connect(space: UserSpace, ctx: RequestContext, client: str | None) -> None:
     """An MCP client connected (`initialize`). Audited at most once an hour, with its name."""
-    note_seen(space, "mcp")
+    channel = ctx.channel if ctx.channel in ("mcp", "mcp-http") else "mcp"
+    note_seen(space, channel)
     if client:
-        space.repo.meta_set("agent.client.mcp", client)
-    if _ago(space.repo.meta_get("agent.last_connect_audit"), CONNECT_EVERY):
-        space.repo.meta_set("agent.last_connect_audit", now_iso())
+        space.repo.meta_set(f"agent.client.{channel}", client)
+    audit_key = "agent.last_connect_audit" + ("" if channel == "mcp" else f".{channel}")
+    if _ago(space.repo.meta_get(audit_key), CONNECT_EVERY):
+        space.repo.meta_set(audit_key, now_iso())
         space.audit(ctx, "agent:connect", target=client or "", result="ok")
 
 
@@ -99,7 +102,7 @@ def summary(space: UserSpace) -> dict:
             last_channel, last_active = c, at
     # "connected" means an assistant reached the app directly (MCP or the HTTP API). Drafts pasted with
     # `rb propose` arrive as the agent's work on channel cli, but no assistant is wired up (#33).
-    if seen["mcp"] or seen["api"]:
+    if any(seen[c] for c in DIRECT_CHANNELS):
         state = "connected"
     elif token_issued:
         state = "token_unused"
@@ -107,7 +110,7 @@ def summary(space: UserSpace) -> dict:
         state = "copy_and_paste"
     else:
         state = "not_set_up"
-    direct = [(at, c) for c, at in seen.items() if c in ("mcp", "api") and at]
+    direct = [(at, c) for c, at in seen.items() if c in DIRECT_CHANNELS and at]
     direct_active, direct_channel = max(direct) if direct else (None, None)
     stale_token = bool(refused and (not seen["api"] or refused > seen["api"]))
     return {"state": state, "last_active": last_active, "last_channel": last_channel, "stale_token": stale_token,
@@ -151,6 +154,7 @@ def agent_status(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
         "direct_active": s["direct_active"],
         "channels": {
             "mcp": {"last_seen": s["seen"]["mcp"], "client": space.repo.meta_get("agent.client.mcp")},
+            "mcp-http": {"last_seen": s["seen"]["mcp-http"], "client": space.repo.meta_get("agent.client.mcp-http")},
             "api": {"last_seen": s["seen"]["api"], "token_issued": s["token_issued"],
                     "token_used": bool(s["token_issued"] and s["seen"]["api"] and s["seen"]["api"] >= s["token_issued"]),
                     "replaced_token_refused": s["token_refused"]},

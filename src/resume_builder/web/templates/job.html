@@ -1,10 +1,13 @@
 {% extends "base.html" %}
+{% from "_commands.html" import next_steps %}
 {% block title %}{{ job.job_id }}{% endblock %}
 {% block body %}
 <h1>{{ job.title or job.job_id }} <span class="pill stage-{{ job.stage }}">{{ job.stage }}</span>{% if job.archived %} <span class="pill">archived</span>{% endif %}</h1>
 <p class="muted"><code>{{ job.job_id }}</code> · <a href="/u/{{ user }}/companies/{{ job.company }}">{{ job.company }}</a>{% if job.department %} / {{ job.department }}{% endif %}
 {% if job.location %} · {{ job.location }}{% endif %}{% if job.work_arrangement %} · {{ job.work_arrangement }}{% endif %}{% if job.salary_range %} · {{ job.salary_range }}{% endif %}
 {% if job.posting_url and job.posting_url.startswith(("http://", "https://")) %} · <a href="{{ job.posting_url }}" rel="noreferrer noopener">posting</a>{% elif job.posting_url %} · <span class="muted">{{ job.posting_url }}</span>{% endif %}</p>
+<div class="card"><h2>Next steps <a class="help-link" href="/help/user-manual#the-commands-page" target="rb-help" data-help title="Help: next steps">?</a></h2>
+{{ next_steps(steps, user) }}<p class="muted" style="font-size:13px">More on the <a href="/u/{{ user }}/commands?job={{ job.job_id }}">Commands</a> page.</p></div>
 <div class="grid">
 <div class="card"><h2>Timeline</h2>
 <ul class="timeline">

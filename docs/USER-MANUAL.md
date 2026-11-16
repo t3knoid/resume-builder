@@ -634,11 +634,20 @@ Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It
 
 - **Home:** sync status and anything needing attention, whether your AI agent is set up and when it was last active, upcoming actions (overdue in red), stale applications, proposed events and jobs waiting for you.
 - **Applications:** filter by stage, company, department; sort by any column.
-- **Application:** posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
+- **Application:** the next steps for this job with the commands to run (see below), then posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
 - **Company:** every application to that company over time.
 - **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match and any job you already track. Signed in, each has a form to check the company, department and any value, handle a duplicate, and **Confirm** (or **Discard**); it does exactly what `rb confirm-job` does. Not signed in, each shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run. Proposed events on a job's page get **Confirm** and **Discard** buttons the same way.
 - **Help:** the **Help** link at the top of every page opens these guides (quick start, this manual, and working with an AI agent) in a separate help window. Clicking a help link again brings that window to the front and shows the new page instead of opening another one. A small **?** next to some headings (sync status, the AI agent card, proposed jobs, signing in) opens help at the matching section, and the help window has a search box. The help comes with your version of resume-builder and works without an internet connection. If your browser blocks pop-ups, help opens in a single reused tab instead.
 - **Dashboard:** applications per week, response rate, median days to first response, how far applications got, outcomes by source, response rate with and without a cover letter, and the bullets that appear most in resumes that reached interviews.
+- **Commands:** every everyday `rb` command, ready to copy (below).
+
+### The Commands page
+
+You don't have to remember commands or type job ids. The **Commands** page (in the menu at the top) lists the everyday `rb` commands grouped by task: check and sync, add a job, tailor with an AI assistant, render and approve, track the application, and website, backups and checks. Pick a job at the top and every command is filled in with its job id and, where one is needed, the id of its latest rendered resume. Click **Copy** next to a command, paste it into a terminal in your resume-builder folder and press Enter. Only what the app can't know stays in angle brackets, such as `<link>` or `<what happened>`: replace those before running the command. Commands that read from the clipboard or a file show a macOS/Linux line and a Windows PowerShell line; use the one for your computer.
+
+Each job's page starts with **Next steps**: only what fits where that job is, in order. For example: paste the posting into `posting.md`; write your `interest_notes`; tailor the resume with your assistant; confirm the draft items the tailored resume uses; read and approve the cover letter or answer; render the resume; record that you applied, with the ids of exactly what you sent; once you've applied, record replies and interviews, or follow up when it's gone quiet. It names the file to edit where that's the step. `rb next <job-id>` prints the same steps in the terminal. They're suggestions: nothing changes until you run a command, and the app never changes a job's stage by itself.
+
+If you have more than one user folder, commands for a user other than `RB_DEFAULT_USER` include `--user <name>`. The page only reads; it needs no sign-in.
 
 ## 13. Your public resume
 
@@ -722,7 +731,7 @@ The app has no built-in AI and needs no paid AI plan: copy and paste works with 
 
 There are three ways to connect it:
 
-- **MCP tools** (Claude Code, Claude Desktop, Gemini CLI, Codex CLI, GitHub Copilot in VS Code, Copilot CLI and others): the assistant calls resume-builder directly through `rb mcp`.
+- **MCP tools** (Claude Code, Claude Desktop, Gemini CLI, Codex CLI, GitHub Copilot in VS Code, Copilot CLI and others): the assistant calls resume-builder directly, either by starting `rb mcp` itself, or, for assistants on your computer that support it, through the URL `http://localhost:8000/mcp/<you>` with an agent token (the tracker must be running).
 - **Copy and paste** (claude.ai, Gemini, ChatGPT, Microsoft Copilot): paste `rb brief <job-id>` in, and pipe each block it returns into `rb propose`.
 - **HTTP API** for your own scripts, with a token from `rb token --actor agent`.
 
@@ -777,6 +786,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb new-job [--company --department --title --source --create]`                    | Start a job without a link (paste the posting later) |
 | `rb list [--stage --company --all]`                                                | List applications                                   |
 | `rb show <job-id>`                                                                 | One application in full                             |
+| `rb next <job-id>`                                                                 | What to do next for a job, with the commands to run |
 | `rb event <job-id> [--type --stage --date --notes --documents --corrects]`         | Add an event                                        |
 | `rb job-drafts` / `confirm-job <n>` / `discard-job <n>`                        | Jobs proposed by the agent                          |
 | `rb event-drafts` / `confirm-event <n>` / `discard-event <n>`                  | Events proposed by the agent                        |

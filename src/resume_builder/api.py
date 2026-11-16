@@ -12,6 +12,7 @@ operations too; it never reads files or the database directly.
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,7 @@ from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 
 from . import __version__
 from .errors import AppError, PermissionDenied
+from .models import FINAL_STAGES
 from .operations import invoke
 from .security import RequestContext
 from .space import App
@@ -94,6 +96,7 @@ def create_api(app: App, routers: tuple | list = ()) -> FastAPI:
         )
     for router in [*app.extensions.routers, *routers]:
         api.include_router(router)
+    _mcp_http(api, app)
     _website(api, app)
     return api
 
@@ -121,6 +124,86 @@ def _endpoint(app: App, op):
     ])
     return endpoint
 
+
+
+# ---------------------------------------------------------------- MCP over HTTP (issue #35)
+
+MCP_MAX_BYTES = 1_000_000
+
+
+def _mcp_http(api: FastAPI, app: App) -> None:
+    """`POST /mcp/{user}`: MCP's Streamable HTTP transport, for assistants on the user's own computer.
+
+    The same tools and handler as `rb mcp` (stdio), as the `agent` actor on channel `mcp-http`. Every
+    request needs the agent's token. The Host check (#31) applies to every request; a foreign
+    `Origin` is refused too, as the MCP spec requires against DNS rebinding. Answers are plain JSON:
+    these tools never need server-initiated messages, so there's no event stream and no session id.
+    Local only, like the rest of the site: cloud connectors can't and mustn't reach it (PRD 10).
+    """
+    from .mcp import SUPPORTED_VERSIONS, McpServer
+    from .services.agent_status import note_replaced_token
+    from .services.space_ops import hash_token
+
+    def refuse(status: int, message: str, **headers) -> JSONResponse:
+        return JSONResponse({"error": message}, status_code=status, headers=headers)
+
+    @api.post("/mcp/{user}", include_in_schema=False)
+    async def mcp_post(request: Request, user: str):
+        _check_user(app, user)
+        origin = request.headers.get("origin")
+        if origin and origin.lower() != f"{request.url.scheme}://{request.headers.get('host', '')}".lower():
+            return refuse(403, "Requests from another website aren't allowed.")
+        auth = request.headers.get("authorization") or ""
+        token = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+        if not token:
+            return refuse(401, "An agent token is required. Issue one with `rb token --actor agent` and send it as "
+                               "`Authorization: Bearer <token>`.", **{"WWW-Authenticate": "Bearer"})
+        space = app.space(user)
+        actor = await run_in_threadpool(actor_for_token, space, token)
+        if actor is None:
+            if await run_in_threadpool(space.repo.replaced_token_actor, hash_token(token)) == "agent":
+                await run_in_threadpool(note_replaced_token, space)
+            return refuse(401, "That token isn't valid (it may have been replaced). Issue a new one with "
+                               "`rb token --actor agent`.", **{"WWW-Authenticate": "Bearer"})
+        if actor != "agent":
+            return refuse(403, "MCP is the AI agent's channel: use an agent token (`rb token --actor agent`), "
+                               "not the owner's.")
+        version = request.headers.get("mcp-protocol-version")
+        if version and version not in SUPPORTED_VERSIONS:
+            return refuse(400, f"Unsupported MCP protocol version `{version[:40]}`. "
+                               f"Supported: {', '.join(SUPPORTED_VERSIONS)}.")
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MCP_MAX_BYTES:
+            return refuse(413, "The request is too large.")
+        body = await request.body()
+        if len(body) > MCP_MAX_BYTES:
+            return refuse(413, "The request is too large.")
+        try:
+            message = json.loads(body)
+        except ValueError:
+            return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}},
+                                status_code=400)
+
+        server = McpServer(app, user, channel="mcp-http")
+        invalid = {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid request"}}
+
+        def run():
+            if isinstance(message, list):
+                replies = [invalid if not isinstance(m, dict) else server.handle(m) for m in message]
+                replies = [r for r in replies if r is not None]
+                return replies or None
+            return server.handle(message) if isinstance(message, dict) else invalid
+
+        reply = await run_in_threadpool(run)
+        if reply is None:  # only notifications: accepted, nothing to say
+            return Response(status_code=202)
+        return JSONResponse(reply)
+
+    @api.api_route("/mcp/{user}", methods=["GET", "DELETE", "PUT", "PATCH"], include_in_schema=False)
+    def mcp_other(user: str):
+        # No server-initiated stream (GET) and no sessions to end (DELETE): POST only.
+        return refuse(405, "Use POST: this MCP endpoint answers requests and has no event stream or sessions.",
+                      Allow="POST")
 
 # ---------------------------------------------------------------- website (read-only)
 
@@ -244,7 +327,46 @@ def _website(api: FastAPI, app: App) -> None:
             pass
         captures = list(reversed(run(user, "posting_captures", {"job_id": job_id})))  # newest first
         return page(request, "job.html", status_code=status_code, user=user, job=detail, docs=docs, snaps=snaps,
-                    captures=captures, profile_diff=_profile_diff(public, profile), error=error)
+                    captures=captures, profile_diff=_profile_diff(public, profile), error=error,
+                    steps=next_steps(user, job_id))
+
+    # ------------------------------------------------------------ copy-ready commands (issue #36)
+
+    from . import commands as rbcmd
+
+    def user_flag(user: str) -> str | None:
+        """`--user <name>` only when plain `rb` wouldn't pick this user by itself."""
+        default = app.settings.default_user
+        if default:
+            return None if user == default else user
+        users, _ = app.discover_users()
+        return None if users == [user] else user
+
+    def shown(commands: list, user: str) -> list[dict]:
+        flag = user_flag(user)
+        out = []
+        for c in commands:
+            c = c if isinstance(c, rbcmd.Command) else rbcmd.Command.from_dict(c)
+            out.append({"lines": rbcmd.lines(c, flag), "note": c.note})
+        return out
+
+    def next_steps(user: str, job_id: str) -> list[dict]:
+        return [{**s, "commands": shown(s["commands"], user)} for s in run(user, "job_next_steps", {"job_id": job_id})]
+
+    @api.get("/u/{user}/commands", response_class=HTMLResponse, include_in_schema=False)
+    def commands_page(request: Request, user: str, job: str | None = None):
+        jobs = [j for j in run(user, "job_list", {}) if j["stage"] not in FINAL_STAGES]
+        ids = [j["job_id"] for j in jobs]
+        if job and job not in ids:
+            run(user, "job_get", {"job_id": job})          # 404 for an unknown job; closed jobs are fine
+            ids.append(job)
+        job = job or (ids[0] if ids else None)
+        resumes = run(user, "snapshot_list", {"job_key": job, "doc_type": "resume"}) if job else []
+        resumes = [r for r in resumes if not r["preview"]]
+        groups = [{"title": g["title"], "commands": shown(g["commands"], user)}
+                  for g in rbcmd.catalog(job, resumes[-1]["id"] if resumes else None)]
+        return page(request, "commands.html", user=user, jobs=jobs, job=job, groups=groups,
+                    steps=next_steps(user, job) if job else [], user_flag=user_flag(user))
 
     @api.get("/u/{user}/proposals", response_class=HTMLResponse, include_in_schema=False)
     def proposals(request: Request, user: str, notice: str | None = None):

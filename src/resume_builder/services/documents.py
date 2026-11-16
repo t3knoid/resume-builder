@@ -200,4 +200,4 @@ def document_approve(space: UserSpace, ctx: RequestContext, data: DocKeyIn) -> d
                                  warnings=[p.to_dict() for p in findings], approved_snapshot=sid)
     space.changed("document", data.job_id, doc_kind=kind, slug=slug)
     return {"approved": kind, "snapshot_id": sid, "warnings_recorded": [p.to_dict() for p in findings],
-            "next": f"Download it with `rb export {sid}`. When you apply, add an `applied` event listing {sid}."}
+            "next": f"Export it with `rb regenerate {sid}` (into output/). When you apply, add an `applied` event listing {sid}."}

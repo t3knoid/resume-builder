@@ -185,3 +185,12 @@ def test_only_the_user_guides_are_packaged():
     packaged = Path(helpdocs.__file__).resolve().parent / "help"
     if packaged.is_dir():   # in the image
         assert sorted(p.name for p in packaged.iterdir()) == sorted(g.file for g in helpdocs.GUIDES)
+
+
+def test_web_files_have_no_control_characters():
+    """A mangled escape once put a control character into the link-arrow CSS, showing " 97"."""
+    web = Path(helpdocs.__file__).parent / "web"
+    bad = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+    for f in [*web.rglob("*.html"), *web.rglob("*.js"), *web.rglob("*.css")]:
+        assert not bad.search(f.read_text(encoding="utf-8")), f
+    assert r"\2197" in (web / "templates" / "base.html").read_text(encoding="utf-8")

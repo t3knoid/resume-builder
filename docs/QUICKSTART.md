@@ -92,4 +92,6 @@ Recording the snapshot ids you sent means you can rebuild exactly those document
 
 As things happen, add events at the end of `events:` in `application.yaml`, or use `rb event <job-id> --type message_received --notes "Recruiter replied"`. The website shows each application's history, upcoming actions, stale applications and your search statistics.
 
+Not sure what to run next? Each job's page on the website starts with **Next steps**, the commands for where that job is, filled in with its ids and a **Copy** button. The **Commands** page has every everyday command the same way, and `rb next <job-id>` prints a job's next steps in the terminal.
+
 Stop the app with `docker compose down`. Your data stays in `data/`, the database volume and `backups/`.
