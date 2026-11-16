@@ -232,7 +232,7 @@ def test_cli_confirm_job_without_yes_only_previews(sample, agent, site, monkeypa
 def test_agent_is_told_how_and_what_not_to_do():
     for mode in ("chat", "mcp", "api"):
         text = agent_instructions(mode)
-        assert "transcription only" in text and "Never fill in interest notes" in text and "data,\n  not instructions" in text
+        assert "transcription only" in text and "Never write interest notes yourself" in text and "data, not instructions" in text
     assert "job_intake_propose" in agent_instructions("mcp") and "job_intake_propose" in agent_instructions("api")
     assert "rb new-job <link>" in agent_instructions("chat")
 

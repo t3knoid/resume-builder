@@ -20,12 +20,18 @@
     <tr><td>{{ label }}</td><td>{% if m.suggested %}{% for c in m.candidates if c.slug == m.suggested %}{{ c.name }}{% endfor %} <code>{{ m.suggested }}</code> <span class="ok">in your registry</span>{% else %}{{ m.name }} <span class="stale">not in your registry</span>{% if m.candidates %} <span class="muted">(similar: {% for c in m.candidates %}<code>{{ c.slug }}</code>{% if not loop.last %}, {% endif %}{% endfor %})</span>{% endif %}{% endif %}</td><td></td><td></td></tr>
     {% endif %}{% endfor %}
   </table></div>
+  {% if p.from_user %}<p><strong>From you, via the agent: check these are your words.</strong></p>
+  <div class="table-wrap"><table>
+    {% for name in ("interest_level", "interest_notes", "source", "next_action", "next_action_due", "notes") if p.from_user.get(name) not in (none, "") %}
+    <tr><td>{{ name | replace("_", " ") }}</td><td>{{ p.from_user[name] }}</td></tr>
+    {% endfor %}
+  </table></div>{% endif %}
   {% for line in v.disagreements + v.notes %}<p class="stale">Check: {{ line }}</p>{% endfor %}
   {% for d in v.duplicates %}<p class="stale">Already tracking <a href="/u/{{ user }}/jobs/{{ d.job_id }}">{{ d.job_id }}</a> ({{ d.reasons | join(", ") }}{% if d.archived %}, archived{% endif %}). Use <code>rb confirm-job {{ p.proposal_id }} --recapture {{ d.job_id }}</code> to save this posting for it instead.</p>{% endfor %}
   <details><summary>The posting as captured</summary><pre>{{ v.posting_preview }}</pre></details>
   {% set err = errors.get(p.proposal_id) %}
   {% if err %}<div class="bad"><p><strong>Not created:</strong> {{ err.message }}</p>{% if err.problems %}<ul>{% for pr in err.problems %}<li>{% if pr.field %}<code>{{ pr.field }}</code>: {% endif %}{{ pr.message }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
-  {% if signed_in %}{% set given = values.get(p.proposal_id, {}) %}{% set current = {} %}{% for f in v.fields %}{% set _ = current.update({f.name: f.value}) %}{% endfor %}
+  {% if signed_in %}{% set given = values.get(p.proposal_id, {}) %}{% set current = {} %}{% for f in v.fields %}{% set _ = current.update({f.name: f.value}) %}{% endfor %}{% if p.from_user.source %}{% set _ = current.update({"source": p.from_user.source}) %}{% endif %}
   <form method="post" action="/u/{{ user }}/proposals/{{ p.proposal_id }}/confirm">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <table>
@@ -45,6 +51,10 @@
       </td></tr>
       {% for name in edit_fields %}
       <tr><th>{{ name | replace("_", " ") }}</th><td><input name="f_{{ name }}" size="60" value="{{ given.get('f_' ~ name, current.get(name, '')) }}"></td></tr>
+      {% endfor %}
+      <tr><th colspan="2">Your answers{% if p.from_user %} (passed on by the agent; change anything that isn't in your words){% endif %}</th></tr>
+      {% for name in answer_fields %}{% set val = given.get('a_' ~ name, p.from_user.get(name) if p.from_user.get(name) is not none else '') %}
+      <tr><th>{{ name | replace("_", " ") }}</th><td>{% if name in ("interest_notes", "notes") %}<textarea name="a_{{ name }}" rows="3" cols="60">{{ val }}</textarea>{% elif name == "interest_level" %}<input name="a_{{ name }}" size="3" value="{{ val }}" placeholder="1-5">{% elif name == "next_action_due" %}<input name="a_{{ name }}" size="12" value="{{ val }}" placeholder="YYYY-MM-DD">{% else %}<input name="a_{{ name }}" size="60" value="{{ val }}">{% endif %}</td></tr>
       {% endfor %}
       {% if v.duplicates %}<tr><th>Already tracking</th><td>
         {% for d in v.duplicates %}<label><input type="radio" name="duplicate" value="recapture:{{ d.job_id }}" {{ 'checked' if loop.first and given.get('duplicate', '') in ('', 'recapture:' ~ d.job_id) or given.get('duplicate') == 'recapture:' ~ d.job_id }}> save this posting for {{ d.job_id }}</label><br>{% endfor %}

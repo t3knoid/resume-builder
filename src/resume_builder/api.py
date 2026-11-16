@@ -328,6 +328,7 @@ def _website(api: FastAPI, app: App) -> None:
         captures = list(reversed(run(user, "posting_captures", {"job_id": job_id})))  # newest first
         return page(request, "job.html", status_code=status_code, user=user, job=detail, docs=docs, snaps=snaps,
                     captures=captures, profile_diff=_profile_diff(public, profile), error=error,
+                    detail_fields=WEB_DETAIL_FIELDS,
                     steps=next_steps(user, job_id))
 
     # ------------------------------------------------------------ copy-ready commands (issue #36)
@@ -415,7 +416,7 @@ def _website(api: FastAPI, app: App) -> None:
         reg = run(user, "org_list")
         return page(request, "proposals.html", status_code=status_code, user=user, proposals=run(user, "job_intake_proposals"),
                     companies=reg["companies"], notice=notice, errors=errors or {}, values=values or {},
-                    edit_fields=WEB_INTAKE_FIELDS)
+                    edit_fields=WEB_INTAKE_FIELDS, answer_fields=WEB_ANSWER_FIELDS)
 
     # ------------------------------------------------------------ owner sign-in (issue #30)
 
@@ -479,7 +480,7 @@ def _website(api: FastAPI, app: App) -> None:
         def act():
             try:
                 view = run(user, "job_intake_proposals", {"proposal_id": proposal_id})[0]
-                payload = _confirm_payload(form, view["preview"])
+                payload = _confirm_payload(form, view["preview"], view.get("from_user") or {})
                 out = run_owner(user, "job_intake_confirm", {"proposal_id": proposal_id, **payload})
             except AppError as exc:
                 return proposals_page(request, user, errors={proposal_id: exc}, values={proposal_id: dict(form)},
@@ -511,6 +512,39 @@ def _website(api: FastAPI, app: App) -> None:
         def act():
             try:
                 run_owner(user, f"event_{action}", {"draft_id": draft_id})
+            except AppError as exc:
+                return job_page(request, user, job_id, error=exc, status_code=exc.status_code)
+            return RedirectResponse(f"/u/{user}/jobs/{job_id}", status_code=303)
+
+        return await run_in_threadpool(act)
+
+    @api.post("/u/{user}/jobs/{job_id}/details", include_in_schema=False)
+    async def job_details(request: Request, user: str, job_id: str):
+        """The owner's own fields of a job (issue #38): only the ones changed in the form are sent."""
+        _, form = await owner_form(request, user)
+
+        def act():
+            try:
+                current = run(user, "job_get", {"job_id": job_id})
+                changes = _details_changes(form, current)
+                if changes:
+                    run_owner(user, "application_update", {"job_id": job_id, "changes": changes})
+            except AppError as exc:
+                return job_page(request, user, job_id, error=exc, status_code=exc.status_code)
+            return RedirectResponse(f"/u/{user}/jobs/{job_id}", status_code=303)
+
+        return await run_in_threadpool(act)
+
+    @api.post("/u/{user}/updates/{draft_id}/{action}", include_in_schema=False)
+    async def update_action(request: Request, user: str, draft_id: int, action: str):
+        _, form = await owner_form(request, user)
+        if action not in ("confirm", "discard"):
+            raise HTTPException(404)
+        job_id = str(form.get("job_id") or "")
+
+        def act():
+            try:
+                run_owner(user, f"application_draft_{action}", {"draft_id": draft_id})
             except AppError as exc:
                 return job_page(request, user, job_id, error=exc, status_code=exc.status_code)
             return RedirectResponse(f"/u/{user}/jobs/{job_id}", status_code=303)
@@ -553,9 +587,28 @@ def _website(api: FastAPI, app: App) -> None:
 
 WEB_INTAKE_FIELDS = ("title", "location", "work_arrangement", "salary_range", "date_posted", "closing_date",
                      "external_id", "posting_url", "source")
+WEB_ANSWER_FIELDS = ("interest_level", "interest_notes", "next_action", "next_action_due", "notes")  # issue #38
+WEB_DETAIL_FIELDS = ("interest_level", "interest_notes", "source", "next_action", "next_action_due", "notes",
+                     "fit_summary", "outcome_reason")
 
 
-def _confirm_payload(form, preview: dict) -> dict:
+def _form_text(value) -> str:
+    return "" if value is None else str(value)
+
+
+def _details_changes(form, current: dict) -> dict:
+    """The job-page details form, as application_update changes: only fields that differ; empty clears."""
+    changes = {}
+    for name in WEB_DETAIL_FIELDS:
+        key = f"d_{name}"
+        if key in form:
+            new = str(form[key]).strip()
+            if new != _form_text(current.get(name)).strip():
+                changes[name] = new or None
+    return changes
+
+
+def _confirm_payload(form, preview: dict, from_user: dict | None = None) -> dict:
     """The choices in a website Confirm form, as job_intake_confirm input (the same as rb confirm-job)."""
     from .errors import ValidationFailed
 
@@ -570,7 +623,10 @@ def _confirm_payload(form, preview: dict) -> dict:
     if form.get("add_department"):
         department = department or (form.get("posting_department") or "").strip() or None
         create = create or bool(department)
+    from_user = from_user or {}
     current = {f["name"]: f["value"] for f in preview["fields"]}
+    if from_user.get("source"):
+        current["source"] = from_user["source"]  # what the agent passed on from you is the starting value
     overrides = {}
     for name in WEB_INTAKE_FIELDS:
         key = f"f_{name}"
@@ -578,8 +634,16 @@ def _confirm_payload(form, preview: dict) -> dict:
             new = str(form[key]).strip()
             if new != (current.get(name) or ""):
                 overrides[name] = new or None  # your own value; empty clears it
+    answers = {}
+    for name in WEB_ANSWER_FIELDS:
+        key = f"a_{name}"
+        if key in form:
+            new = str(form[key]).strip()
+            if new != _form_text(from_user.get(name)).strip():
+                answers[name] = new or None
     duplicate = str(form.get("duplicate") or "")
     return {"company": company, "department": department, "create_missing": create, "overrides": overrides,
+            "answers": answers,
             "recapture": duplicate.removeprefix("recapture:") if duplicate.startswith("recapture:") else None,
             "allow_duplicate": duplicate == "new", "replace_posting": bool(form.get("replace_posting"))}
 

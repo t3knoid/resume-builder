@@ -442,9 +442,9 @@ The job gets `application.yaml` with those fields, and `posting.md` with the pos
 - Remote, hybrid or onsite is set only when the posting says exactly one of them. If it mentions more than one, it's left for you to set, and the preview says why.
 - The salary is the range as posted, not an estimate. The company is filled in only when the page names it; otherwise you pick it.
 - The posting's wording is never changed in `posting.md`: only its layout is turned into plain text.
-- `interest_notes` (why you want the job) is never filled in. That's yours to write, and letters use only that for motivation.
+- `interest_notes` (why you want the job) is never read from the posting. That's yours to write, and letters use only that for motivation.
 
-Values you type yourself (`--set`, `--title`, or a field you change in the review) are yours and aren't checked against the posting.
+Values you type yourself (`--set`, `--title`, or a field you change in the review) are yours and aren't checked against the posting. That's also how you add your own answers while you start the job: `--set interest_notes="..."`, `--set interest_level=4`, `--set next_action="..."`, `--set next_action_due=2026-11-20` or `--set notes="..."`, or type the field's name at the review prompt.
 
 Options (`rb new-job --help`):
 
@@ -453,6 +453,7 @@ rb new-job <url> --company northwind-labs --department platform-engineering   # 
 rb new-job <url> --company "Fabrikam" --create                                  # add a new company
 rb new-job <url> --title "Platform Engineer II"                                 # your own title instead of the posting's
 rb new-job <url> --set work_arrangement=hybrid --set salary_range=              # your own value; empty clears one
+rb new-job <url> --set interest_notes="I want to build tools other teams use"   # why you want it, in your words
 rb new-job <url> --yes                                                          # accept the preview without asking
 ```
 
@@ -470,7 +471,7 @@ You can also pipe the text in: `rb new-job --stdin <link> < posting.txt`. Piped 
 
 **Already tracking it?** If a job has the same link (tracking parameters ignored) or the same company and posting id, `rb new-job` says so. In a terminal it offers to save the new copy of the posting for that job instead (`--recapture <job-id>`); `--allow-duplicate` starts a separate job anyway. Re-capturing replaces the posting part of `posting.md` and keeps your notes. If you pasted or edited the posting text yourself, it's left alone unless you add `--replace`.
 
-**Let your AI agent propose it.** An MCP or API agent given the link can propose the job instead; you review it with `rb confirm-job <n>`, which works like the review above (section 15).
+**Let your AI agent propose it.** An MCP or API agent given the link can propose the job instead. It asks how interested you are, why you want the job, how you found it and any next step, and passes your answers on word for word. You review everything with `rb confirm-job <n>`, which works like the review above (section 15).
 
 **No link and no text?** Without a link, `--file` or `--stdin`, `rb new-job` just creates the job: it asks for the company and department and seeds the folder. Paste the posting into `posting.md` and fill in `application.yaml` yourself.
 
@@ -491,6 +492,23 @@ Fill in what you know. The useful ones:
 - `next_action` and `next_action_due`: shown on the website's home page, sorted by date.
 - `contacts`: recruiters, hiring managers, interviewers, referrers.
 - `source`, `salary_range`, `work_arrangement`: used by the dashboard.
+
+You don't have to open the file for your own fields. `rb set` changes them and writes them back to `application.yaml`, keeping your comments:
+
+```sh
+rb set <job-id> --interest-level 4 --interest-notes "I want to build tools other teams use"
+rb set <job-id> --next-action "Follow up with the recruiter" --due 2026-11-20
+rb set <job-id> --clear next_action                    # clear a field
+rb set <job-id> --interest-notes - < why.txt           # longer text from a file
+```
+
+On Windows PowerShell, read the file with `Get-Content`:
+
+```powershell
+Get-Content why.txt -Raw | rb set <job-id> --interest-notes -
+```
+
+It covers `--interest-level`, `--interest-notes`, `--source`, `--next-action`, `--next-action-due` (or `--due`), `--notes`, `--fit-summary` and `--outcome-reason`. It never changes the stage or events. Signed in to the website, the job page's **Edit details** does the same.
 
 ### Events
 
@@ -650,7 +668,8 @@ Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It
 - **Applications:** filter by stage, company, department; sort by any column.
 - **Application:** the next steps for this job with the commands to run (see below), then posting, details, contacts, the full timeline (who recorded each event and when), documents and their status, every snapshot (open as PDF or HTML, compare any two), how this resume differs from your public one, and every saved copy of the posting with the date it was captured (shown as text, never as the original web page).
 - **Company:** every application to that company over time.
-- **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match and any job you already track. Signed in, each has a form to check the company, department and any value, handle a duplicate, and **Confirm** (or **Discard**); it does exactly what `rb confirm-job` does. Not signed in, each shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run. Proposed events on a job's page get **Confirm** and **Discard** buttons the same way.
+- **Proposed jobs:** jobs your AI agent proposed, each with every value it found, where the posting says it, the company match, any job you already track, and the answers it passed on from you ("from you, via the agent: check these are your words"). Signed in, each has a form to check the company, department, any value and your answers, handle a duplicate, and **Confirm** (or **Discard**); it does exactly what `rb confirm-job` does. Not signed in, each shows the `rb confirm-job <n>` and `rb discard-job <n>` commands to run. Proposed events and proposed changes to a job's details on its page get **Confirm** and **Discard** buttons the same way.
+- **Edit details:** signed in, a job's page lets you change your own fields (interest level and notes, source, next action and due date, notes, fit summary, outcome reason). It does what `rb set` does.
 - **Help:** the **Help** link at the top of every page opens these guides (quick start, this manual, and working with an AI agent) in a separate help window. Clicking a help link again brings that window to the front and shows the new page instead of opening another one. A small **?** next to some headings (sync status, the AI agent card, proposed jobs, signing in) opens help at the matching section, and the help window has a search box. The help comes with your version of resume-builder and works without an internet connection. If your browser blocks pop-ups, help opens in a single reused tab instead.
 - **Dashboard:** applications per week, response rate, median days to first response, how far applications got, outcomes by source, response rate with and without a cover letter, and the bullets that appear most in resumes that reached interviews.
 - **Commands:** every everyday `rb` command, ready to copy (below).
@@ -777,6 +796,11 @@ There are three ways to connect it:
 
 Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `rb discard-event <n>`.
 
+**Your answers, passed on.** Interest notes, interest level, how you found a job, next steps and private notes are yours: the agent never writes them. When you tell it these things, it can pass on your words, word for word, and you check them before anything is saved:
+
+- While proposing a new job, it adds them to the proposal. `rb confirm-job <n>` lists them under "Your answers (the agent passed these on: check they are your words)". Change one with `--set interest_notes="..."`, clear one with `--set next_action=`, or type the field's name at the review prompt.
+- For a job you already track, it proposes a change. `rb update-drafts` lists each one with the old and new values; `rb confirm-update <n>` applies it and `rb discard-update <n>` drops it. If you changed that field yourself after the agent proposed it, confirming is refused, so your edit is never overwritten.
+
 An MCP or API agent can also **propose a new job**: give it the posting's link and it calls `job_intake_propose`. The app fetches the posting itself and rejects any value the posting doesn't state. Nothing is created until you review it: `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`), and `rb confirm-job <n>` shows the same preview and questions as `rb new-job <url>` (it takes the same options, such as `--company` and `--yes`). `rb discard-job <n>` drops one. Everything the agent does is in the audit log (`rb audit`), marked as the agent.
 
 Not sure what to ask? The website's **Prompts** page and `rb prompts <job-id>` have a ready-made prompt for everything the agent can do, filled in for your job, and connected assistants offer them as slash commands (see [ready-made prompts](AI-AGENTS.md#ready-made-prompts)).
@@ -803,7 +827,7 @@ The agent asks when your library doesn't say something it needs: a missing metri
 | --- | --- |
 | New experience or a fact missing from your library (a tool, a project, an outcome) | The agent saves it as a **draft** bullet in `base.yaml`. It's used only after you confirm it: `rb confirm <id>`, or `status: confirmed` in `base.yaml`. |
 | A metric or detail for a bullet that's already confirmed | Add it to that bullet in `base.yaml` yourself; the agent can't change confirmed content. |
-| Why you want the job | Write it in `interest_notes` in the job's `application.yaml`, in your own words; rough notes are fine. The agent turns them into the "Why do you want to work here?" answer and the cover letter, but never writes the reasons for you (without notes it writes `[MOTIVATION NEEDED]`). |
+| Why you want the job | Save it as `interest_notes`, in your own words; rough notes are fine. Run `rb set <job-id> --interest-notes "..."`, edit the job's `application.yaml`, or let a connected agent pass on exactly what you wrote (you confirm it with `rb confirm-update <n>`). The agent turns your notes into the "Why do you want to work here?" answer and the cover letter, but never writes the reasons for you (without notes it writes `[MOTIVATION NEEDED]`). |
 
 Then ask it to redo the work, for example: "Update the profile and fit report for `<job-id>` with my answers." It reads the brief again, picks up what you confirmed, and rewrites the drafts.
 
@@ -830,6 +854,8 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb event <job-id> [--type --stage --date --notes --documents --corrects]`         | Add an event                                        |
 | `rb job-drafts` / `confirm-job <n>` / `discard-job <n>`                        | Jobs proposed by the agent                          |
 | `rb event-drafts` / `confirm-event <n>` / `discard-event <n>`                  | Events proposed by the agent                        |
+| `rb set <job-id> [--interest-level --interest-notes --source --next-action --due --notes --fit-summary --outcome-reason --clear F]` | Change your own fields on a job |
+| `rb update-drafts` / `confirm-update <n>` / `discard-update <n>`               | Changes to job fields proposed by the agent         |
 | `rb archive-job <job-id> [--restore]`                                              | Archive an application                              |
 | `rb orgs` / `add-company` / `add-department` / `rename-org` / `merge-orgs` | Companies and departments                           |
 | `rb confirm <id>`                                                                  | Confirm a draft library item                        |

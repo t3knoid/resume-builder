@@ -56,6 +56,13 @@ def steps_for(space: UserSpace, job_id: str) -> list[dict]:
                            "that are right and discard the rest (they're listed on this page).",
                            [cmd("confirm-event", str(d["id"])) for d in shown] + [cmd("discard-event", str(d["id"])) for d in shown]))
 
+    updates = space.repo.application_drafts(job_id)
+    if updates:
+        shown = updates[:MAX_IDS]
+        steps.append(_step("update_drafts", f"Your AI agent proposed {len(updates)} change(s) to this job's details. "
+                           "Check each is right (interest notes must be your own words), then confirm or discard it.",
+                           [cmd("confirm-update", str(d["id"])) for d in shown] + [cmd("discard-update", str(d["id"])) for d in shown]))
+
     if row["archived"]:
         steps.append(_step("archived", "This job is archived. Restore it to see it in your lists again.",
                            [cmd("archive-job", job_id, "--restore")]))
@@ -76,8 +83,10 @@ def steps_for(space: UserSpace, job_id: str) -> list[dict]:
         again = [cmd("new-job", "--recapture", job_id, url, note="Or read it from the link again.")] if url.startswith(("http://", "https://")) else []
         steps.append(_step("posting", "Paste the job posting into posting.md. Tailoring needs it.", again, file=f"{folder}/posting.md"))
     if not (data.get("interest_notes") or "").strip():
-        steps.append(_step("interest_notes", "Write why you want this job under interest_notes in application.yaml. "
-                           "Cover letters and \"why here\" answers use only these notes for motivation.",
+        steps.append(_step("interest_notes", "Write why you want this job, in your own words. Cover letters and "
+                           "\"why here\" answers use only these notes for motivation. Or edit interest_notes in "
+                           "application.yaml.",
+                           [cmd("set", job_id, "--interest-notes", "<why you want this job>")],
                            file=f"{folder}/application.yaml"))
 
     profile = space.repo.get_profile(job_id)

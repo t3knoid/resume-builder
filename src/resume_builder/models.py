@@ -393,6 +393,36 @@ class PostingCapture(BaseModel):
         return self
 
 
+class UserAnswers(Strict):
+    """Application fields only the user can know, in the user's own words (issue #38).
+
+    Never checked against a posting. When the AI agent passes them on (`from_user` in a job
+    proposal, or a drafted change), they wait for the owner, who checks they are really theirs.
+    """
+
+    interest_level: int | None = Field(None, ge=1, le=5, description="1 (meh) to 5 (dream job)")
+    interest_notes: LongText | None = Field(None, description="Why the user wants this job, in their own words, "
+                                                              "word for word. The only source of motivation in letters.")
+    source: Literal["linkedin", "referral", "company_site", "recruiter", "job_board", "other"] | None = Field(
+        None, description="How the user found the job")
+    next_action: ShortText | None = Field(None, description='e.g. "Follow up with recruiter"')
+    next_action_due: date | None = Field(None, description="YYYY-MM-DD")
+    notes: LongText | None = Field(None, description="Private notes. Never on any document.")
+
+
+class ApplicationChanges(UserAnswers):
+    """The application fields that can be changed after a job exists (issue #38). Only the fields
+    given are changed; a field given as null is cleared."""
+
+    fit_summary: LongText | None = Field(None, description="Short note on fit, often from the fit report")
+    outcome_reason: ShortText | None = Field(None, description="Why it ended, once it has")
+
+
+USER_ANSWER_FIELDS = tuple(UserAnswers.model_fields)
+CHANGEABLE_FIELDS = tuple(ApplicationChanges.model_fields)
+UserAnswerName = Literal["interest_level", "interest_notes", "source", "next_action", "next_action_due", "notes"]
+
+
 IntakeFieldName = Literal["title", "company", "department", "posting_url", "source", "external_id", "location",
                           "work_arrangement", "salary_range", "date_posted", "closing_date"]
 FieldOrigin = Literal["structured", "rule", "adapter", "agent"]

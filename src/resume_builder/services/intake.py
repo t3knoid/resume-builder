@@ -16,7 +16,8 @@ from ..clock import now_iso
 from ..errors import Conflict, NotFound, Problem, ValidationFailed
 from ..fetch import FetchedPage, FetchFailed, FetchLimits
 from ..models import (
-    Application, Company, Department, Event, ExtractedField, IntakeFieldName, PostingCapture, content_hash,
+    Application, Company, Department, Event, ExtractedField, IntakeFieldName, PostingCapture, UserAnswerName,
+    UserAnswers, content_hash,
 )
 from ..operations import operation
 from ..posting_fields import Extraction
@@ -419,6 +420,9 @@ class IntakeIn(BaseModel):
                                                                   "posting again. Default: extracted again from the capture.")
     overrides: dict[IntakeFieldName, str | None] = Field(
         default_factory=dict, description="Your own values, replacing extracted ones (null clears one)")
+    answers: dict[UserAnswerName, str | int | None] = Field(
+        default_factory=dict, description="Your own answers the posting can't give: interest_level, interest_notes, "
+                                          "source, next_action, next_action_due, notes (null leaves one out)")
     recapture: str | None = Field(None, description="A job id: save this posting for that existing job instead of creating one")
     replace_posting: bool = Field(False, description="With recapture: replace posting text you pasted or edited")
     allow_duplicate: bool = Field(False, description="Create a new job even though one looks like the same posting")
@@ -444,10 +448,13 @@ def run_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn, in_txn=Non
     if capture.job_id is not None:
         raise Conflict(f"This posting was already used for `{capture.job_id}`.")
 
+    answers = user_answers(data.answers)
     if data.recapture:
         out = attach_posting(space, ctx, data.recapture, capture, replace=data.replace_posting, in_txn=in_txn)
         out["recaptured"] = True
         out["next"] = [f"The posting for {data.recapture} was updated; its application fields were left as they were."]
+        if answers:
+            out["next"].append(f"Your answers ({', '.join(answers)}) weren't applied. Set them with: rb set {data.recapture}")
         return out
 
     # Values: the preview's fields, checked again against the posting; then the owner's own values.
@@ -510,6 +517,9 @@ def run_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn, in_txn=Non
     entered = today_for(space)
     job_id = build_job_id(entered, company.slug, dept_slug, set(space.repo.job_ids()))
     app_fields = {k: v for k, v in values.items() if k in APPLICATION_FIELDS and v not in (None, "")}
+    for name, value in answers.items():  # yours; a posting value you set yourself (overrides) still wins
+        if not (name in data.overrides and name in APPLICATION_FIELDS):
+            app_fields[name] = value
     try:
         application = Application(job_id=job_id, company=company.slug, department=dept_slug, **app_fields,
                                   events=[Event(date=entered, type="stage_change", stage="interested",
@@ -534,10 +544,24 @@ def run_intake(space: UserSpace, ctx: RequestContext, data: IntakeIn, in_txn=Non
     space.changed("job_created", job_id)
     space.changed("posting", job_id)
 
-    nxt = [f"Add why you want this job as `interest_notes` in jobs/{job_id}/application.yaml (letters use only that for motivation).",
-           f"Ask your AI agent for a profile and fit report for {job_id}, or run: rb brief {job_id}"]
+    nxt = [] if application.interest_notes else [
+        f'Add why you want this job as interest_notes, in your own words (letters use only that for motivation): '
+        f'rb set {job_id} --interest-notes "..."']
+    nxt.append(f"Ask your AI agent for a profile and fit report for {job_id}, or run: rb brief {job_id}")
     return {"job_id": job_id, "folder": f"jobs/{job_id}/", "capture_id": capture.id, "created": created,
-            "fields": {k: v for k, v in values.items() if v not in (None, "")}, "note": note, "next": nxt}
+            "fields": {k: v for k, v in values.items() if v not in (None, "")}, "answers": answers, "note": note,
+            "next": nxt}
+
+
+def user_answers(given: dict) -> dict:
+    """The user's answers, checked (1-5, a known source, a real date), without the empty ones."""
+    given = {k: v for k, v in given.items() if v not in (None, "")}
+    try:
+        checked = UserAnswers(**given)
+    except PydanticValidationError as exc:
+        raise ValidationFailed("Some of your answers can't be used.",
+                               [Problem(e["msg"], field=".".join(str(x) for x in e["loc"])) for e in exc.errors()]) from None
+    return checked.model_dump(mode="json", exclude_none=True)
 
 
 def _new_slug(name: str, taken: set[str]) -> str:
@@ -560,7 +584,12 @@ class IntakeProposeIn(BaseModel):
                                                 "by the user). `url` is then only recorded as its link.")
     fields: list[ExtractedField] = Field(default_factory=list, description=
                                          "Values you read from the posting, each with the exact passage that states "
-                                         "it. Leave out anything the posting doesn't state. Never interest_notes.")
+                                         "it. Leave out anything the posting doesn't state.")
+    from_user: UserAnswers | None = Field(None, description=
+                                          "What the user told you, word for word: how interested they are (1-5), why "
+                                          "they want the job, how they found it, a next step, private notes. Never "
+                                          "your own words, never a guess; leave out anything they didn't say. The "
+                                          "user checks these before the job is created.")
     note: Annotated[str, StringConstraints(max_length=1000)] | None = Field(
         None, description="A short note for the user, e.g. what to check")
 
@@ -589,11 +618,12 @@ def job_intake_propose(space: UserSpace, ctx: RequestContext, data: IntakePropos
         if row["capture_id"] == capture.id:
             raise Conflict(f"This posting is already proposed as #{row['id']}, waiting for the owner.")
     stored = {"fields": [f.model_dump() for f in extraction.as_list()], "disagreements": extraction.disagreements,
-              "notes": notes, "adapter": adapter}
+              "notes": notes, "adapter": adapter,
+              "from_user": data.from_user.model_dump(mode="json", exclude_none=True) if data.from_user else {}}
     with space.repo.transaction():
         proposal_id = space.repo.add_intake_proposal(capture.id, stored, data.note, ctx.actor)
     preview = _preview(space, capture, extraction, adapter=adapter, notes=notes)
-    return {"proposal_id": proposal_id, "preview": preview,
+    return {"proposal_id": proposal_id, "preview": preview, "from_user": stored["from_user"],
             "next": f"The owner reviews it with `rb confirm-job {proposal_id}` or discards it with `rb discard-job {proposal_id}`."}
 
 
@@ -604,6 +634,7 @@ def _proposal_view(space: UserSpace, row: dict) -> dict:
                             disagreements=list(data.get("disagreements", [])))
     return {"proposal_id": row["id"], "status": row["status"], "proposed_by": row["created_by"],
             "proposed_at": row["created_at"], "note": row["note"], "job_id": row["job_id"],
+            "from_user": data.get("from_user") or {},
             "preview": _preview(space, capture, extraction, adapter=data.get("adapter"), notes=data.get("notes"))}
 
 
@@ -627,6 +658,8 @@ class ProposalConfirmIn(BaseModel):
     department: str | None = None
     create_missing: bool = False
     overrides: dict[IntakeFieldName, str | None] = Field(default_factory=dict, description="Your own values")
+    answers: dict[UserAnswerName, str | int | None] = Field(
+        default_factory=dict, description="Your changes to the answers the agent passed on (null clears one)")
     recapture: str | None = Field(None, description="Save the posting for this existing job instead of creating one")
     replace_posting: bool = False
     allow_duplicate: bool = False
@@ -645,9 +678,12 @@ def _pending(space: UserSpace, proposal_id: int) -> dict:
            "Create the job an agent proposed, after the owner's review (same choices as job_intake).", writes=True)
 def job_intake_confirm(space: UserSpace, ctx: RequestContext, data: ProposalConfirmIn) -> dict:
     row = _pending(space, data.proposal_id)
-    fields = [ExtractedField(**f) for f in json.loads(row["data"])["fields"]]
+    stored = json.loads(row["data"])
+    fields = [ExtractedField(**f) for f in stored["fields"]]
+    answers = {**(stored.get("from_user") or {}), **data.answers}  # the owner's changes win; null clears
     intake = IntakeIn(capture_id=row["capture_id"], fields=fields, company=data.company, department=data.department,
-                      create_missing=data.create_missing, overrides=data.overrides, recapture=data.recapture,
+                      create_missing=data.create_missing, overrides=data.overrides, answers=answers,
+                      recapture=data.recapture,
                       replace_posting=data.replace_posting, allow_duplicate=data.allow_duplicate)
     out = run_intake(space, ctx, intake,
                      in_txn=lambda job_id: space.repo.resolve_intake_proposal(row["id"], "confirmed", job_id, ctx.actor))

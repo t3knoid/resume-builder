@@ -125,7 +125,12 @@ def catalog(job: str | None = None, snapshot: str | None = None, letter: str | N
             cmd("event", j, "--type", "interview", "--notes", "<who and how it went>", note="An interview."),
             cmd("event", j, "--type", "follow_up_sent", "--notes", "<what you sent>", note="You followed up."),
             cmd("event", j, "--stage", "<stage>", note="The stage changed (screening, interviewing, offer, rejected, ...)."),
+            cmd("set", j, "--interest-notes", "<why you want this job>",
+                note="Why you want the job, in your words (letters use only these notes for motivation). "
+                     "Add --interest-level 1 to 5 too."),
+            cmd("set", j, "--next-action", "<what to do>", "--due", "<YYYY-MM-DD>", note="Your next step and when it's due."),
             cmd("event-drafts", note="Events your AI agent proposed, waiting for you."),
+            cmd("update-drafts", note="Changes to job fields your AI agent proposed, waiting for you."),
             cmd("actions", note="Upcoming actions and stale applications."),
             cmd("next", j, note="What to do next for this job."),
             cmd("archive-job", j, note="Archive the job (nothing is deleted)."),

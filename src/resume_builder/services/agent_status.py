@@ -161,6 +161,7 @@ def agent_status(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
             "cli": {"last_seen": s["seen"]["cli"]},
         },
         "recent": recent,
-        "waiting": {"jobs": len(space.repo.list_intake_proposals("pending")), "events": len(space.repo.event_drafts())},
+        "waiting": {"jobs": len(space.repo.list_intake_proposals("pending")), "events": len(space.repo.event_drafts()),
+                    "updates": len(space.repo.application_drafts())},
         "hints": hints,
     }

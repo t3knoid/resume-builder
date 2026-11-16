@@ -298,6 +298,30 @@ class SqliteStorage:
     def delete_event_draft(self, draft_id: int) -> None:
         self.conn.execute("DELETE FROM event_drafts WHERE id = ?", (draft_id,))
 
+    # ------------------------------------------------------------ application drafts (issue #38)
+    def add_application_draft(self, job_id: str, data: dict, note: str | None, actor: str) -> int:
+        now = now_iso()
+        cur = self.conn.execute(
+            "INSERT INTO application_drafts (job_id, status, data, note, created_by, created_at, updated_by, updated_at) "
+            "VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)", (job_id, _j(data), note, actor, now, actor, now))
+        return cur.lastrowid
+
+    def get_application_draft(self, draft_id: int) -> dict | None:
+        return _one(self.conn.execute("SELECT * FROM application_drafts WHERE id = ?", (draft_id,)))
+
+    def application_drafts(self, job_id: str | None = None, status: str = "pending") -> list[dict]:
+        if job_id:
+            return _all(self.conn.execute("SELECT * FROM application_drafts WHERE status = ? AND job_id = ? ORDER BY id",
+                                          (status, job_id)))
+        return _all(self.conn.execute("SELECT * FROM application_drafts WHERE status = ? ORDER BY id", (status,)))
+
+    def resolve_application_draft(self, draft_id: int, status: str, actor: str) -> None:
+        cur = self.conn.execute(
+            "UPDATE application_drafts SET status = ?, updated_by = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+            (status, actor, now_iso(), draft_id))
+        if cur.rowcount != 1:
+            raise Conflict(f"Change #{draft_id} isn't waiting any more.")
+
     # ------------------------------------------------------------ captured postings (append-only, R13.10)
     _CAPTURE_LIST_COLUMNS = "id, job_id, source_kind, source_url, source_path, content_type, content_hash, captured_at, created_by, created_at"
 

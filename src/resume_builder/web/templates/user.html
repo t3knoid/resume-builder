@@ -13,6 +13,7 @@
   {% if status.missing_contact_secrets %}<p class="stale">Contact details not set: {{ status.missing_contact_secrets | join(", ") }} (add them to .env).</p>{% endif %}
   {% if status.job_proposals_waiting %}<p class="stale">{{ status.job_proposals_waiting }} job(s) proposed by your agent, waiting for you: <a href="/u/{{ user }}/proposals">review them</a>.</p>{% endif %}
   {% if status.event_drafts_waiting %}<p class="stale">{{ status.event_drafts_waiting }} proposed event(s) waiting for you: <code>rb event-drafts</code>.</p>{% endif %}
+  {% if status.update_drafts_waiting %}<p class="stale">{{ status.update_drafts_waiting }} proposed change(s) to job details waiting for you (on their job pages): <code>rb update-drafts</code>.</p>{% endif %}
   <p class="muted">Saved documents: {{ status.snapshots.count }} of {{ status.snapshots.limit }}{% if status.snapshots.near_limit %} <span class="stale">(near the limit)</span>{% endif %}</p>
 </div>
 <div class="card">
@@ -35,8 +36,8 @@
     <tr><td>Copy and paste</td><td>{{ agent.channels.cli.last_seen or "never" }}</td><td></td></tr>
   </table>
   {% if agent.recent %}<p><strong>Recent:</strong></p><ul>{% for r in agent.recent %}<li>{{ r.at }} · {{ r.operation | replace("_", " ") }}{% if r.job_id %} · <a href="/u/{{ user }}/jobs/{{ r.job_id }}">{{ r.job_id }}</a>{% endif %}{% if r.result != "ok" %} <span class="muted">({{ r.result }})</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
-  {% if agent.waiting.jobs or agent.waiting.events %}<p class="stale">Waiting for you:
-    {% if agent.waiting.jobs %}<a href="/u/{{ user }}/proposals">{{ agent.waiting.jobs }} proposed job(s)</a>{% endif %}{% if agent.waiting.jobs and agent.waiting.events %}, {% endif %}{% if agent.waiting.events %}{{ agent.waiting.events }} proposed event(s) (on their job pages){% endif %}.</p>{% endif %}
+  {% if agent.waiting.jobs or agent.waiting.events or agent.waiting.updates %}<p class="stale">Waiting for you:
+    {% if agent.waiting.jobs %}<a href="/u/{{ user }}/proposals">{{ agent.waiting.jobs }} proposed job(s)</a>{% endif %}{% if agent.waiting.jobs and agent.waiting.events %}, {% endif %}{% if agent.waiting.events %}{{ agent.waiting.events }} proposed event(s) (on their job pages){% endif %}{% if agent.waiting.updates %}{% if agent.waiting.jobs or agent.waiting.events %}, {% endif %}{{ agent.waiting.updates }} proposed change(s) to job details (on their job pages){% endif %}.</p>{% endif %}
   <p class="muted">Setup for Claude, Gemini, ChatGPT and Copilot: docs/AI-AGENTS.md.</p>
 </div>
 <div class="card">

@@ -62,7 +62,7 @@ The PDF lands in `output/<your-name>/public/`.
 rb new-job https://careers.example.com/jobs/1234
 ```
 
-It reads the posting from the link, shows what it found (title, location, salary, dates and so on) and the company it matched, and asks once before creating `data/<your-name>/jobs/<job-id>/` with `posting.md` and `application.yaml` filled in. If the site needs a sign-in, copy the posting into a file in `data/<your-name>/intake/` and run `rb new-job --file intake/<name>.txt <link>` instead. In `application.yaml`, write why you want the job under `interest_notes`.
+It reads the posting from the link, shows what it found (title, location, salary, dates and so on) and the company it matched, and asks once before creating `data/<your-name>/jobs/<job-id>/` with `posting.md` and `application.yaml` filled in. If the site needs a sign-in, copy the posting into a file in `data/<your-name>/intake/` and run `rb new-job --file intake/<name>.txt <link>` instead. Then save why you want the job, in your own words: `rb set <job-id> --interest-notes "..."` (or write it under `interest_notes` in `application.yaml`). Letters use only these notes for motivation.
 
 No link? `rb new-job --title "Platform Engineer"` (without a link) asks for the company and creates the folder; paste the job description into `posting.md` yourself.
 

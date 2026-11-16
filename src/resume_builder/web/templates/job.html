@@ -27,6 +27,21 @@
 <div class="card"><h2>Details</h2>
 <p><strong>Interest:</strong> {{ job.interest_level or "—" }}/5{% if job.interest_notes %}<br>{{ job.interest_notes }}{% endif %}</p>
 {% if job.next_action %}<p><strong>Next:</strong> {{ job.next_action }} {% if job.next_action_due %}({{ job.next_action_due }}){% endif %}</p>{% endif %}
+{% if job.fit_summary %}<p><strong>Fit:</strong> {{ job.fit_summary }}</p>{% endif %}
+{% if job.outcome_reason %}<p><strong>Outcome:</strong> {{ job.outcome_reason }}</p>{% endif %}
+{% if job.update_drafts %}<p class="stale">Changes proposed by the agent, waiting for you. Interest notes must be your own words.</p><ul>{% for d in job.update_drafts %}<li>#{{ d.draft_id }}{% if d.note %} <span class="muted">({{ d.note }})</span>{% endif %}:
+{% for ch in d.changes %}<br><strong>{{ ch.field | replace("_", " ") }}</strong>: <span class="muted">{{ ch.before if ch.before is not none else "(empty)" }}</span> → {{ ch.after if ch.after is not none else "(cleared)" }}{% endfor %}
+<br>{% if signed_in %}{% for action in ("confirm", "discard") %}<form method="post" action="/u/{{ user }}/updates/{{ d.draft_id }}/{{ action }}" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="job_id" value="{{ job.job_id }}"><button>{{ action | capitalize }}</button></form> {% endfor %}
+{% else %}<code>rb confirm-update {{ d.draft_id }}</code> or <code>rb discard-update {{ d.draft_id }}</code>{% endif %}</li>{% endfor %}</ul>{% endif %}
+{% if signed_in %}<details><summary>Edit details</summary>
+<form method="post" action="/u/{{ user }}/jobs/{{ job.job_id }}/details">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<table>{% for name in detail_fields %}{% set val = job[name] if job[name] is not none else "" %}
+<tr><th>{{ name | replace("_", " ") }}</th><td>{% if name in ("interest_notes", "notes", "fit_summary") %}<textarea name="d_{{ name }}" rows="3" cols="50">{{ val }}</textarea>{% elif name == "source" %}<select name="d_{{ name }}"><option value="" {{ 'selected' if not val }}>—</option>{% for s in ("linkedin", "referral", "company_site", "recruiter", "job_board", "other") %}<option value="{{ s }}" {{ 'selected' if val == s }}>{{ s | replace("_", " ") }}</option>{% endfor %}</select>{% elif name == "interest_level" %}<input name="d_{{ name }}" size="3" value="{{ val }}" placeholder="1-5">{% elif name == "next_action_due" %}<input name="d_{{ name }}" size="12" value="{{ val }}" placeholder="YYYY-MM-DD">{% else %}<input name="d_{{ name }}" size="50" value="{{ val }}">{% endif %}</td></tr>
+{% endfor %}</table>
+<p class="muted">Only fields you change are saved; an empty field is cleared. Interest notes are the only source of motivation in your letters.</p>
+<p><button>Save details</button></p></form></details>
+{% else %}<p class="muted">Change these with <code>rb set {{ job.job_id }}</code>, or <a href="/u/{{ user }}/login">sign in</a> to edit them here.</p>{% endif %}
 <p><strong>Sent:</strong>
 {% if job.submission.resume_snapshot %}resume <a href="/u/{{ user }}/snapshots/{{ job.submission.resume_snapshot }}.pdf">{{ job.submission.resume_snapshot }}</a>{% else %}<span class="muted">nothing recorded</span>{% endif %}
 {% if job.submission.cover_letter_snapshot %}<br>cover letter <a href="/u/{{ user }}/snapshots/{{ job.submission.cover_letter_snapshot }}.pdf">{{ job.submission.cover_letter_snapshot }}</a>{% endif %}

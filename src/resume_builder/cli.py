@@ -174,32 +174,39 @@ def _new_job_interactive(app: App, ctx: RequestContext, args) -> dict:
 INTAKE_FIELDS = ("title", "company", "department", "location", "work_arrangement", "salary_range", "date_posted",
                  "closing_date", "external_id", "posting_url", "source")
 ORIGIN_LABEL = {"structured": "page data", "rule": "posting text", "adapter": "site adapter", "agent": "agent", "you": "you"}
+# Your own answers, which no posting gives (issue #38). `source` is also a posting field, set with --source.
+ANSWER_FIELDS = ("interest_level", "interest_notes", "next_action", "next_action_due", "notes")
+CHANGEABLE = ("interest_level", "interest_notes", "source", "next_action", "next_action_due", "notes", "fit_summary",
+              "outcome_reason")
 
 
-def _overrides(args) -> dict:
-    """The user's own field values: --set FIELD=VALUE, plus --title and --source."""
-    overrides = {}
+def _overrides(args) -> tuple[dict, dict]:
+    """The user's own values: --set FIELD=VALUE, plus --title and --source. Returns the posting
+    fields (overrides) and the answers no posting gives (interest_notes and the like)."""
+    overrides, answers = {}, {}
     for item in args.set:
         name, sep, value = item.partition("=")
-        if not sep or name.strip() not in INTAKE_FIELDS:
-            raise AppError(f"--set needs FIELD=VALUE with FIELD one of: {', '.join(INTAKE_FIELDS)}.")
-        overrides[name.strip()] = value.strip() or None
+        name = name.strip()
+        if not sep or name not in INTAKE_FIELDS + ANSWER_FIELDS:
+            raise AppError(f"--set needs FIELD=VALUE with FIELD one of: {', '.join(INTAKE_FIELDS + ANSWER_FIELDS)}.")
+        (answers if name in ANSWER_FIELDS else overrides)[name] = value.strip() or None
     for name in ("title", "source"):  # new-job's own options are your values too
         if getattr(args, name, None):
             overrides.setdefault(name, getattr(args, name))
-    return overrides
+    return overrides, answers
 
 
 def _confirm_job(app: App, ctx: RequestContext, args) -> int:
     """`rb confirm-job <n>`: the same review as `rb new-job <url>`, for a job the agent proposed."""
-    overrides = _overrides(args)
+    overrides, answers = _overrides(args)
     view = invoke(app, ctx, "job_intake_proposals", {"proposal_id": args.proposal_id})[0]
     if view["status"] != "pending":
         raise AppError(f"Proposed job #{args.proposal_id} was already {view['status']}.")
     print(f"Proposed by {view['proposed_by']} on {view['proposed_at'][:10]}" + (f": {view['note']}" if view["note"] else ""))
-    keep = ("company", "department", "create_missing", "overrides", "recapture", "replace_posting", "allow_duplicate")
+    keep = ("company", "department", "create_missing", "overrides", "answers", "recapture", "replace_posting",
+            "allow_duplicate")
     return _review_and_create(
-        app, ctx, args, view["preview"], overrides,
+        app, ctx, args, view["preview"], overrides, answers, view.get("from_user") or {},
         submit=lambda payload: invoke(app, ctx, "job_intake_confirm",
                                       {"proposal_id": args.proposal_id, **{k: payload[k] for k in keep}}),
         interactive=not args.yes and sys.stdin.isatty())
@@ -211,22 +218,24 @@ def _intake(app: App, ctx: RequestContext, args) -> int:
     text = sys.stdin.read().lstrip("﻿") if args.stdin else None
     if args.stdin and not (text or "").strip():
         raise AppError("Nothing came in on stdin. Pipe the posting text: rb new-job --stdin [url] < posting.txt")
-    overrides = _overrides(args)
+    overrides, answers = _overrides(args)
 
     if args.file:  # read by the file adapter, from the intake folder only
         preview = invoke(app, ctx, "job_intake_preview_file", {"file": args.file, "url": args.url})
     else:
         preview = invoke(app, ctx, "job_intake_preview", {"url": args.url, "text": text})
-    return _review_and_create(app, ctx, args, preview, overrides,
+    return _review_and_create(app, ctx, args, preview, overrides, answers, {},
                               submit=lambda payload: invoke(app, ctx, "job_intake", payload),
                               interactive=not args.yes and not args.stdin and sys.stdin.isatty())
 
 
-def _review_and_create(app: App, ctx: RequestContext, args, preview: dict, overrides: dict, submit, interactive: bool) -> int:
+def _review_and_create(app: App, ctx: RequestContext, args, preview: dict, overrides: dict, answers: dict,
+                       from_user: dict, submit, interactive: bool) -> int:
     """Show the preview, settle a duplicate and the company, let the user change fields, then submit
-    (job_intake for `rb new-job`, job_intake_confirm for `rb confirm-job`)."""
-    _show_preview(preview, overrides)
-    payload = {"capture_id": preview["capture_id"], "fields": preview["fields"], "overrides": overrides,
+    (job_intake for `rb new-job`, job_intake_confirm for `rb confirm-job`). `from_user` holds the
+    answers the agent passed on; `answers` the user's own changes to them."""
+    _show_preview(preview, overrides, answers=answers, from_user=from_user)
+    payload = {"capture_id": preview["capture_id"], "fields": preview["fields"], "overrides": overrides, "answers": answers,
                "company": args.company, "department": args.department, "create_missing": args.create,
                "recapture": args.recapture, "replace_posting": args.replace, "allow_duplicate": args.allow_duplicate}
 
@@ -267,6 +276,9 @@ def _review_and_create(app: App, ctx: RequestContext, args, preview: dict, overr
             if _ask(f"The posting names the department '{dept['name']}'. Add it to your registry? [y/N] ", default=False):
                 payload["department"], payload["create_missing"] = dept["name"], True
         if interactive:
+            editable = [f for f in INTAKE_FIELDS if f not in ("company", "department")] + list(ANSWER_FIELDS)
+            if not (answers.get("interest_notes") or from_user.get("interest_notes")):
+                print("\nTip: type interest_notes to add why you want this job (letters use only that for motivation).")
             while True:
                 ans = input("\nCreate this job? [Y/n], or type a field name to change it: ").strip().lower()
                 if ans in ("", "y", "yes"):
@@ -274,15 +286,14 @@ def _review_and_create(app: App, ctx: RequestContext, args, preview: dict, overr
                 if ans in ("n", "no", "q"):
                     print("Nothing was created. The captured posting is kept; run the same command again to use it.")
                     return 1
-                if ans in INTAKE_FIELDS and ans not in ("company", "department"):
-                    overrides[ans] = input(f"{ans} (empty to clear): ").strip() or None
-                    _show_preview(preview, overrides, fields_only=True)
+                if ans in editable:
+                    (answers if ans in ANSWER_FIELDS else overrides)[ans] = input(f"{ans} (empty to clear): ").strip() or None
+                    _show_preview(preview, overrides, fields_only=True, answers=answers, from_user=from_user)
                 else:
-                    print(f"Type one of: {', '.join(f for f in INTAKE_FIELDS if f not in ('company', 'department'))}"
-                          " (use --company/--department for those).")
+                    print(f"Type one of: {', '.join(editable)} (use --company/--department for those).")
         elif not args.yes:
             print("\nReview the preview, then run the same command with --yes to create the job "
-                  "(add --set FIELD=VALUE to change a value).")
+                  "(add --set FIELD=VALUE to change a value, e.g. --set interest_notes=\"...\" in your own words).")
             return 0
 
     result = submit(payload)
@@ -313,7 +324,8 @@ def _ask(prompt: str, default: bool) -> bool:
     return default if not ans else ans in ("y", "yes")
 
 
-def _show_preview(preview: dict, overrides: dict, fields_only: bool = False) -> None:
+def _show_preview(preview: dict, overrides: dict, fields_only: bool = False, answers: dict | None = None,
+                  from_user: dict | None = None) -> None:
     rows = {f["name"]: (f["value"], ORIGIN_LABEL.get(f["origin"], f["origin"])) for f in preview["fields"]}
     for name, value in overrides.items():
         rows[name] = (value, "you") if value else ("", "you: cleared")
@@ -328,6 +340,15 @@ def _show_preview(preview: dict, overrides: dict, fields_only: bool = False) -> 
         if name in rows and rows[name][0]:
             value, origin = rows[name]
             print(f"  {name:17} {value}  [{origin}]")
+    mine = {k: (v, "from you, via the agent") for k, v in (from_user or {}).items()}
+    for name, value in (answers or {}).items():
+        mine[name] = (value, "you") if value not in (None, "") else ("", "you: cleared")
+    if any(v not in (None, "") for v, _ in mine.values()):
+        print("\n  Your answers" + (" (the agent passed these on: check they are your words)" if from_user else "") + ":")
+        for name in ("source",) + ANSWER_FIELDS:
+            if name in mine and mine[name][0] not in (None, ""):
+                value, origin = mine[name]
+                print(f"  {name:17} {value}  [{origin}]")
     missing = [n for n in INTAKE_FIELDS if n not in ("company", "department") and not (n in rows and rows[n][0])]
     if missing:
         print(f"  Not stated in the posting: {', '.join(missing)}")
@@ -433,6 +454,24 @@ def build_parser() -> argparse.ArgumentParser:
     cj.add_argument("--yes", "-y", action="store_true", help="accept the proposal without asking")
     dj = cmd("discard-job", "Discard a job the agent proposed (nothing is created).")
     dj.add_argument("proposal_id", type=int)
+    st = cmd("set", "Change a job's own fields: interest level and notes, source, next action, notes, fit summary, "
+                    "outcome reason. Use - as the text to read it from stdin.")
+    st.add_argument("job_id")
+    st.add_argument("--interest-level", type=int, choices=range(1, 6), metavar="1-5", help="1 (meh) to 5 (dream job)")
+    st.add_argument("--interest-notes", metavar="TEXT", help="why you want this job, in your words")
+    st.add_argument("--source", choices=["linkedin", "referral", "company_site", "recruiter", "job_board", "other"])
+    st.add_argument("--next-action", metavar="TEXT", help='e.g. "Follow up with recruiter"')
+    st.add_argument("--next-action-due", "--due", metavar="YYYY-MM-DD")
+    st.add_argument("--notes", metavar="TEXT", help="private notes, never on any document")
+    st.add_argument("--fit-summary", metavar="TEXT")
+    st.add_argument("--outcome-reason", metavar="TEXT")
+    st.add_argument("--clear", action="append", default=[], choices=CHANGEABLE, metavar="FIELD",
+                    help="clear a field (repeatable)")
+    cmd("update-drafts", "Changes to job fields proposed by the agent, waiting for you.")
+    cu = cmd("confirm-update", "Apply a change to a job's fields that the agent proposed.")
+    cu.add_argument("draft_id", type=int)
+    xu = cmd("discard-update", "Discard a change to a job's fields that the agent proposed (nothing changes).")
+    xu.add_argument("draft_id", type=int)
     cmd("event-drafts", "Events proposed by the agent, waiting for you.")
     ce = cmd("confirm-event", "Confirm a proposed event.")
     ce.add_argument("draft_id", type=int)
@@ -668,6 +707,33 @@ def _run(app: App, args) -> int | None:
         return _confirm_job(app, ctx, args)
     elif c == "discard-job":
         _print(op("job_intake_discard", {"proposal_id": args.proposal_id}))
+    elif c == "set":
+        changes = {f: getattr(args, f) for f in CHANGEABLE if getattr(args, f, None) is not None}
+        if sum(v == "-" for v in changes.values()) > 1:
+            raise AppError("Only one field can read its text from stdin (-).")
+        for f, v in changes.items():
+            if v == "-":  # Windows PowerShell 5.1 starts piped text with a byte-order mark
+                changes[f] = sys.stdin.read().lstrip("\ufeff").strip()
+        for f in args.clear:
+            changes[f] = None
+        if not changes:
+            raise AppError("Nothing to change. Give a field, e.g. rb set <job-id> --interest-level 4, or --clear FIELD.")
+        _print(op("application_update", {"job_id": args.job_id, "changes": changes}))
+    elif c == "update-drafts":
+        rows = op("application_drafts")
+        for r in rows:
+            print(f"#{r['draft_id']:<4} {r['job_id']}  by {r['by']} {r['at'][:10]}" + (f": {r['note']}" if r["note"] else ""))
+            for ch in r["changes"]:
+                print(f"      {ch['field']}: {ch['before'] if ch['before'] is not None else '(empty)'}"
+                      f"  ->  {ch['after'] if ch['after'] is not None else '(cleared)'}")
+        if not rows:
+            print("No changes waiting. The agent proposes them with application_propose_update.")
+        else:
+            print("Apply one with: rb confirm-update <n>   (or rb discard-update <n>)")
+    elif c == "confirm-update":
+        _print(op("application_draft_confirm", {"draft_id": args.draft_id}))
+    elif c == "discard-update":
+        _print(op("application_draft_discard", {"draft_id": args.draft_id}))
     elif c == "event-drafts":
         _print(op("event_drafts"))
     elif c == "confirm-event":
@@ -836,6 +902,8 @@ def print_bootstrap(report: dict) -> None:
             print(f"  {st['job_proposals_waiting']} proposed job(s) waiting: rb job-drafts")
         if st["event_drafts_waiting"]:
             print(f"  {st['event_drafts_waiting']} proposed event(s) waiting: rb event-drafts")
+        if st.get("update_drafts_waiting"):
+            print(f"  {st['update_drafts_waiting']} proposed change(s) to job fields waiting: rb update-drafts")
 
 
 if __name__ == "__main__":

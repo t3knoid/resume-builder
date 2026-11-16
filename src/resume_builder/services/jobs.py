@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 
-from ..errors import NotFound, ValidationFailed
-from ..models import Application, Event
+from ..errors import Conflict, NotFound, ValidationFailed
+from ..models import CHANGEABLE_FIELDS, Application, ApplicationChanges, Event, ShortText
 from ..operations import operation
 from ..security import RequestContext
 from ..slug import build_job_id
@@ -97,6 +97,7 @@ def job_get(space: UserSpace, ctx: RequestContext, data: JobIn) -> dict:
     out["posting_text"] = row["posting_text"]
     out["event_log"] = [{**json.loads(e["data"]), "seq": e["seq"], "actor": e["actor"], "recorded_at": e["created_at"]} for e in space.repo.event_rows(data.job_id)]
     out["event_drafts"] = [{"draft_id": d["id"], **json.loads(d["data"]), "by": d["created_by"]} for d in space.repo.event_drafts(data.job_id)]
+    out["update_drafts"] = [_draft_view(r) for r in space.repo.application_drafts(data.job_id)]
     return out
 
 
@@ -226,3 +227,114 @@ def job_archive(space: UserSpace, ctx: RequestContext, data: ArchiveIn) -> dict:
 @operation("event_drafts", "application:read", Empty, "Proposed events waiting for the owner.")
 def event_drafts(space: UserSpace, ctx: RequestContext, data: Empty) -> list[dict]:
     return [{"draft_id": d["id"], "job_id": d["job_id"], **json.loads(d["data"]), "by": d["created_by"]} for d in space.repo.event_drafts()]
+
+
+# ---------------------------------------------------------------- the application's own fields (issue #38)
+
+class UpdateIn(BaseModel):
+    job_id: str
+    changes: ApplicationChanges = Field(description="Only the fields given are changed; null clears one. "
+                                                    + ", ".join(CHANGEABLE_FIELDS))
+
+
+def _changed_fields(changes: ApplicationChanges) -> dict:
+    """The fields the caller gave, as JSON values (null means clear it)."""
+    given = changes.model_dump(mode="json", include=changes.model_fields_set)
+    if not given:
+        raise ValidationFailed(f"Nothing to change. Give one or more of: {', '.join(CHANGEABLE_FIELDS)}.")
+    return given
+
+
+def _current(app: Application, names) -> dict:
+    data = app.model_dump(mode="json")
+    return {n: data.get(n) for n in names}
+
+
+def _apply(space: UserSpace, ctx: RequestContext, job_id: str, given: dict) -> dict:
+    app = space.repo.get_application(job_id)
+    app = Application.model_validate({**app.model_dump(mode="json"), **given})
+    problems = validate_application(app, space.repo.load_registry(), f"jobs/{job_id}/application.yaml")
+    if any(p.severity == "error" for p in problems):
+        raise ValidationFailed("That change can't be made.", problems)
+    with space.repo.transaction():
+        space.repo.save_application(app, space.repo.application_row(job_id)["stage"], ctx.actor)
+    written = space.changed("application", job_id)
+    return {"job_id": job_id, "changed": sorted(given), "file_updated": written,
+            **({} if written else {"note": "application.yaml has unsynced edits; the next sync merges this change in."})}
+
+
+@operation("application_update", "application:write", UpdateIn,
+           "Change an application's own fields: interest level and notes, source, next action, notes, fit summary, "
+           "outcome reason. Never the stage or events.", writes=True)
+def application_update(space: UserSpace, ctx: RequestContext, data: UpdateIn) -> dict:
+    return _apply(space, ctx, data.job_id, _changed_fields(data.changes))
+
+
+class ProposeUpdateIn(UpdateIn):
+    note: ShortText | None = Field(None, description="A short note for the user, e.g. where the change came from")
+
+
+@operation("application_propose_update", "application:propose", ProposeUpdateIn,
+           "Propose a change to an application's own fields, for the owner to confirm. Interest notes and the other "
+           "answers must be the user's own words, word for word.", writes=True)
+def application_propose_update(space: UserSpace, ctx: RequestContext, data: ProposeUpdateIn) -> dict:
+    given = _changed_fields(data.changes)
+    before = _current(space.repo.get_application(data.job_id), given)
+    if before == given:
+        raise ValidationFailed("Those values are already set; there's nothing to propose.")
+    with space.repo.transaction():
+        draft_id = space.repo.add_application_draft(data.job_id, {"changes": given, "before": before}, data.note, ctx.actor)
+    return {"draft_id": draft_id,
+            "next": f"The owner confirms with `rb confirm-update {draft_id}` or discards with `rb discard-update {draft_id}`."}
+
+
+def _draft_view(row: dict) -> dict:
+    data = json.loads(row["data"])
+    return {"draft_id": row["id"], "job_id": row["job_id"], "status": row["status"], "note": row["note"],
+            "by": row["created_by"], "at": row["created_at"],
+            "changes": [{"field": k, "before": data["before"].get(k), "after": v} for k, v in data["changes"].items()]}
+
+
+class DraftsIn(BaseModel):
+    job_id: str | None = Field(None, description="Only this job's")
+
+
+@operation("application_drafts", "application:read", DraftsIn,
+           "Changes to application fields proposed by the agent, waiting for the owner.")
+def application_drafts(space: UserSpace, ctx: RequestContext, data: DraftsIn) -> list[dict]:
+    return [_draft_view(r) for r in space.repo.application_drafts(data.job_id)]
+
+
+def _pending_draft(space: UserSpace, draft_id: int) -> dict:
+    row = space.repo.get_application_draft(draft_id)
+    if row is None:
+        raise NotFound(f"No proposed change #{draft_id}.")
+    if row["status"] != "pending":
+        raise Conflict(f"Proposed change #{draft_id} was already {row['status']}.")
+    return row
+
+
+@operation("application_draft_confirm", "application:write", DraftIn,
+           "Apply a change the agent proposed, after the owner's review.", writes=True)
+def application_draft_confirm(space: UserSpace, ctx: RequestContext, data: DraftIn) -> dict:
+    row = _pending_draft(space, data.draft_id)
+    stored = json.loads(row["data"])
+    now = _current(space.repo.get_application(row["job_id"]), stored["changes"])
+    moved = [k for k, v in stored["before"].items() if now.get(k) != v]
+    if moved:
+        raise Conflict(f"{', '.join(moved)} changed after the agent proposed this, so it could overwrite your edit. "
+                       f"Discard it (rb discard-update {row['id']}) and ask for a new one, or set the value yourself "
+                       f"with rb set {row['job_id']}.")
+    out = _apply(space, ctx, row["job_id"], stored["changes"])
+    with space.repo.transaction():
+        space.repo.resolve_application_draft(row["id"], "confirmed", ctx.actor)
+    return {**out, "draft_id": row["id"]}
+
+
+@operation("application_draft_discard", "application:write", DraftIn,
+           "Discard a change the agent proposed. Nothing is changed.", writes=True)
+def application_draft_discard(space: UserSpace, ctx: RequestContext, data: DraftIn) -> dict:
+    row = _pending_draft(space, data.draft_id)
+    with space.repo.transaction():
+        space.repo.resolve_application_draft(row["id"], "discarded", ctx.actor)
+    return {"draft_id": row["id"], "status": "discarded"}

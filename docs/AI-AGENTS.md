@@ -717,7 +717,7 @@ The agent asks when your library doesn't say something it needs: a missing metri
 | --- | --- |
 | New experience or a fact missing from your library (a tool, a project, an outcome) | The agent saves it as a **draft** bullet in `base.yaml`. It's used only after you confirm it: `rb confirm <id>`, or `status: confirmed` in `base.yaml`. |
 | A metric or detail for a bullet that's already confirmed | Add it to that bullet in `base.yaml` yourself; the agent can't change confirmed content. |
-| Why you want the job | Write it in `interest_notes` in the job's `application.yaml`, in your own words; rough notes are fine. The agent turns them into the "Why do you want to work here?" answer and the cover letter, but never writes the reasons for you (without notes it writes `[MOTIVATION NEEDED]`). |
+| Why you want the job | Save it as `interest_notes`, in your own words; rough notes are fine. Run `rb set <job-id> --interest-notes "..."`, edit the job's `application.yaml`, or tell a connected agent: it proposes your words unchanged (`application_propose_update`) and you confirm with `rb confirm-update <n>`. The agent turns your notes into the "Why do you want to work here?" answer and the cover letter, but never writes the reasons for you (without notes it writes `[MOTIVATION NEEDED]`). |
 
 Then ask it to redo the work, for example: "Update the profile and fit report for `<job-id>` with my answers." It reads the brief again, picks up what you confirmed, and rewrites the drafts.
 
@@ -726,10 +726,13 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 With an MCP or API agent you can hand it a posting link (or the posting text) and let it propose the job:
 
 1. **You:** "Start a job for this posting: https://careers.example.com/jobs/1234".
-2. **Agent:** calls `job_intake_propose` with the link. The app fetches the page itself, with the same safety checks as `rb new-job <url>`. The agent may add values it read from the posting, each with the exact passage that states it; the app rejects any value the posting doesn't state. Nothing is created yet.
-3. **You:** `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`). `rb confirm-job <n>` shows the same preview and asks the same questions as `rb new-job <url>`: company, duplicates, any value to change. Or `rb discard-job <n>`.
+2. **Agent:** asks how interested you are (1–5), why you want the job, how you found it and any next step. Answer in your own words, or skip any of them.
+3. **Agent:** calls `job_intake_propose` with the link and your answers (`from_user`), copied word for word. The app fetches the page itself, with the same safety checks as `rb new-job <url>`. The agent may add values it read from the posting, each with the exact passage that states it; the app rejects any value the posting doesn't state. Nothing is created yet.
+4. **You:** `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`). `rb confirm-job <n>` shows the same preview and asks the same questions as `rb new-job <url>`: company, duplicates, any value to change. It lists your answers as "the agent passed these on: check they are your words"; change one with `--set interest_notes="..."` or at the prompt. Or `rb discard-job <n>`.
 
-The agent can't create the job, fill in your `interest_notes`, or add companies. Chat-only assistants can't propose jobs; run `rb new-job <link>` yourself.
+The agent can't create the job, write your `interest_notes` in its own words, or add companies. Chat-only assistants can't propose jobs; run `rb new-job <link>` yourself, with `--set interest_notes="..."` for your reasons.
+
+Later, tell a connected agent something new about a job you already track ("I'm now a 5 on this one; I met the team and liked them") and it proposes the change with `application_propose_update`. `rb update-drafts` shows the old and new values; `rb confirm-update <n>` applies it, `rb discard-update <n>` drops it. Or change the fields yourself with `rb set <job-id>`.
 
 ## 9. Reviewing what the agent did
 
@@ -737,11 +740,11 @@ The agent can't create the job, fill in your `interest_notes`, or add companies.
   `cover-letter.md`, `answers/why-here.md`) so you can read and edit them. Your edits sync back as yours.
 - **Website:** each job page shows documents and their status, and the timeline shows proposed
   events waiting for you. **Proposed jobs** lists the jobs the agent proposed, with every value and
-  the passage it came from, and the command to confirm or discard each one. Sign in on the site (`rb web-login`) to confirm or discard
-  proposed jobs and events there with a button.
+  the passage it came from, plus the answers it passed on from you, and the command to confirm or discard each one. Sign in on the site (`rb web-login`) to confirm or discard
+  proposed jobs, events and changes to a job's details there with a button.
 - **Audit log:** `rb audit` lists every action with who did it (`agent`, `owner`, `system`) and how.
 - **Nothing is final until you approve it.** Letters and answers need `rb approve`; events need
-  `rb confirm-event`; proposed jobs need `rb confirm-job`; new bullets need `status: confirmed` (or `rb confirm <id>`).
+  `rb confirm-event`; proposed jobs need `rb confirm-job`; proposed changes to a job's details need `rb confirm-update`; new bullets need `status: confirmed` (or `rb confirm <id>`).
 
 ## 10. Troubleshooting
 

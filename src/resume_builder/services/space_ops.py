@@ -45,6 +45,7 @@ def status(space: UserSpace) -> dict:
         "seed_version": space.app.settings.seed_version,
         "event_drafts_waiting": len(space.repo.event_drafts()),
         "job_proposals_waiting": len(space.repo.list_intake_proposals("pending")),
+        "update_drafts_waiting": len(space.repo.application_drafts()),
         "agent": _agent_summary(space),
     }
 

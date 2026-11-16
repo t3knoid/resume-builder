@@ -152,7 +152,7 @@ def test_recent_actions_and_waiting_items(sample, owner, agent, client):
     s = status(sample, owner)
     assert s["recent"][0]["operation"] == "event_propose" and s["recent"][0]["job_id"] == JOB
     assert all(r["operation"] != "agent:connect" for r in s["recent"])
-    assert s["waiting"] == {"jobs": 0, "events": 1}
+    assert s["waiting"] == {"jobs": 0, "events": 1, "updates": 0}
     page = home(client)
     assert f'<a href="/u/{USER}/jobs/{JOB}">{JOB}</a>' in page and "1 proposed event(s)" in page
 

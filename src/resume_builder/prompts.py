@@ -135,7 +135,9 @@ PROMPTS: tuple[Prompt, ...] = (
         "The assistant proposes the job; you review and confirm it.",
         (LINK,),
         "Propose this job posting to resume-builder with job_intake_propose: {link}\n\nOnly transcribe what the "
-        "posting says, and leave my interest notes alone. I'll review the proposal and confirm it.",
+        "posting says. Before you propose it, ask me how interested I am (1-5), why I want this job, how I found it "
+        "and any next step. Pass my answers in from_user exactly as I give them, without rewording, and leave out "
+        "anything I skip. I'll review the proposal and confirm it.",
         ("job_intake_propose",),
         instead=(cmd("new-job", "{link}"),),
         group="Jobs and tracking"),

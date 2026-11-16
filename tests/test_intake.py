@@ -330,7 +330,7 @@ def test_cli_interactive_cancel_creates_nothing(sample, monkeypatch, capsys):
 
 
 def test_cli_rejects_a_bad_set(sample, monkeypatch, capsys):
-    code, out = run(monkeypatch, capsys, ["new-job", "--stdin", "--set", "interest_notes=love it", "--yes"], PASTED)
+    code, out = run(monkeypatch, capsys, ["new-job", "--stdin", "--set", "stage=applied", "--yes"], PASTED)
     assert code == 1 and "--set needs FIELD=VALUE" in out.err
 
 
