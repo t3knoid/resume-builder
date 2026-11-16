@@ -16,7 +16,7 @@ from resume_builder.cli import main
 from resume_builder.errors import ValidationFailed
 from resume_builder.operations import invoke
 
-from .conftest import USER, data_file
+from .conftest import JOB, USER, data_file
 from .docx_builder import docx_from_lines
 from .test_resume_import import assert_reads_the_fixture, text_of
 
@@ -63,6 +63,46 @@ def test_pdf_list_items_are_made_whole_without_changing_words():
     text = "Experience\n\n•\n\n•\n\nCut release time from 3 hours to\n25 minutes.\nWrote the runbook.\n"
     assert resume_readers.pdf_text_to_lines(text) == ("Experience\n\n- Cut release time from 3 hours to 25 minutes.\n"
                                                        "- Wrote the runbook.\n")
+
+
+def test_inline_bullet_marks_and_wrapped_lines_by_position():
+    """The mark on the item's line ("•  item"); wrapped lines indented under the item's text, some in a
+    box of their own; headings and the next role at the margin. Positions are in points."""
+    L, M, T, R = 72.0, 82.0, 92.0, 540.0     # margin, bullet mark, item text, right edge
+    boxes = [
+        [(L, 300, "WORK EXPERIENCE")],
+        [(L, 260, "Platform Engineer"),
+         (L, R, "Contoso Health | Springfield, IL | Jan 2020 – Mar 2023"),        # long, but a header line
+         (L, R - 5, "Contoso Health runs clinics across the region and builds its own scheduling"),
+         (L, 200, "software for them.")],                                           # wrapped paragraph
+        [(M, R - 3, "•  Cut release time from 3 hours to 25 minutes by moving 14 services to GitHub"),
+         (T, 300, "Actions pipelines.")],                                           # wrapped, same box
+        [(M, R - 2, "•  Wrote the on-call runbook, with steps for every alert we")],
+        [(T, 250, "had seen in production")],                                       # wrapped, own box, no period
+        [(L, 200, "Release Engineer")],                                             # the next role: margin
+        [(L, 400, "Northwind Labs | 2017 – 2019")],
+        [(M, 400, "•  Ran the nightly builds")],
+    ]
+    assert resume_readers.pdf_boxes_to_lines(boxes) == (
+        "WORK EXPERIENCE\n\n"
+        "Platform Engineer\nContoso Health | Springfield, IL | Jan 2020 – Mar 2023\n"
+        "Contoso Health runs clinics across the region and builds its own scheduling software for them.\n\n"
+        "- Cut release time from 3 hours to 25 minutes by moving 14 services to GitHub Actions pipelines.\n"
+        "- Wrote the on-call runbook, with steps for every alert we had seen in production\n\n"
+        "Release Engineer\n\nNorthwind Labs | 2017 – 2019\n\n"
+        "- Ran the nightly builds\n")
+
+
+def test_resume_builders_own_ats_pdf_imports_cleanly(sample, owner, roots):
+    """A resume rendered by resume-builder's ATS template (inline marks, hanging indent) reads back
+    with every bullet whole: nothing new to add, no role left out."""
+    pytest.importorskip("weasyprint")
+    from pathlib import Path
+    out = invoke(sample.app, owner, "render", {"job_key": JOB, "variant": "ats"})
+    rel = save(roots, "ats.pdf", Path(out["file"]).read_bytes())
+    r = import_file(sample, owner, rel, dry_run=True)
+    assert [a for a in r["added"] if a["kind"] in ("bullet", "role")] == [], r["added"]
+    assert not [s for s in r["skipped"] if s.get("kind") == "role"], r["skipped"]
 
 
 @pytest.mark.parametrize("head, name, kind", [

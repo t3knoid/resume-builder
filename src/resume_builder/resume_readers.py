@@ -12,6 +12,7 @@ network. These are the converters MarkItDown uses inside, without its file-type 
 from __future__ import annotations
 
 import io
+import json
 import re
 import subprocess
 import sys
@@ -93,22 +94,30 @@ def docx_to_html(data: bytes) -> str:
 # ---------------------------------------------------------------- PDF
 
 # Runs in a child process: a malformed PDF can make a parser slow, and a thread can't be stopped.
-# It imports only pdfminer, reads the PDF's bytes from stdin and writes UTF-8 text to stdout.
+# It imports only pdfminer, reads the PDF's bytes from stdin and writes JSON to stdout: per page, the
+# text boxes in pdfminer's reading order, each a list of its lines as [left edge, right edge, text].
+# The edges tell a wrapped line (indented under its bullet's text) from a new heading at the margin.
 _PDF_CHILD = """
-import io, sys
+import io, json, sys
 data = sys.stdin.buffer.read()
 try:
-    from pdfminer.high_level import extract_text
+    from pdfminer.high_level import extract_pages
+    from pdfminer.layout import LTTextContainer, LTTextLine
     from pdfminer.pdfdocument import PDFPasswordIncorrect, PDFEncryptionError
 except Exception:
     sys.exit(5)
+def lines(box):
+    if isinstance(box, LTTextLine):
+        return [[round(box.x0, 1), round(box.x1, 1), box.get_text()]]
+    return [ln for child in box if isinstance(child, LTTextContainer) for ln in lines(child)]
 try:
-    text = extract_text(io.BytesIO(data), maxpages=int(sys.argv[1]))
+    pages = [[lines(el) for el in page if isinstance(el, LTTextContainer)]
+             for page in extract_pages(io.BytesIO(data), maxpages=int(sys.argv[1]))]
 except (PDFPasswordIncorrect, PDFEncryptionError):
     sys.exit(3)
 except Exception:
     sys.exit(4)
-sys.stdout.buffer.write(text.encode("utf-8"))
+sys.stdout.buffer.write(json.dumps(pages).encode("utf-8"))
 """
 
 
@@ -129,15 +138,27 @@ def pdf_to_text(data: bytes, timeout: float = PDF_TIMEOUT_SECONDS, pages: int = 
         raise ReadFailed("PDF reading isn't available in this installation")
     if proc.returncode != 0:
         raise ReadFailed("the PDF couldn't be read (it may be damaged)")
-    text = proc.stdout.decode("utf-8", "replace").replace("\f", "\n\n").replace("\x00", "")
-    text = re.sub(r"[ \t]+\n", "\n", text)
-    if len(re.findall(r"[^\W\d_]{2,}", text)) < MIN_PDF_WORDS:
+    try:
+        pages = json.loads(proc.stdout.decode("utf-8", "replace"))
+        boxes = [[(float(x0), float(x1), _clean(t)) for x0, x1, t in box] for page in pages for box in page]
+    except (ValueError, TypeError):
+        raise ReadFailed("the PDF couldn't be read (it may be damaged)") from None
+    words = sum(len(re.findall(r"[^\W\d_]{2,}", t)) for box in boxes for _, _, t in box)
+    if words < MIN_PDF_WORDS:
         raise ReadFailed("it has no text to read, so it may be a scanned image (text recognition isn't supported)")
-    return pdf_text_to_lines(text)
+    return pdf_boxes_to_lines(boxes)
+
+
+def _clean(text: str) -> str:
+    return text.replace("\x00", "").replace(" ", " ").strip()
 
 
 _MARK = re.compile(r"[•●▪◦‣·∙■□➢➤►\-–*]")
+_INLINE_MARK = re.compile(r"[•●▪◦‣·∙■□➢➤►\-–*]\s+(?=\S)")   # "•  item" on one line
 _ENDS_SENTENCE = re.compile(r"[.!?:;)\]]$")
+_HEADER_LINE = re.compile(r"\s\|\s|(?:(?:19|20)\d\d|present|current|now)\)?$", re.I)   # "a | b", "... – 2024": a full line
+_MAX_INDENT = 40.0   # points: a wrapped line sits under its item's text, a little right of the mark
+_WRAP_ZONE = 0.15     # a line ending this close to the right margin (share of the text width) was wrapped
 
 
 def _join(lines: list[str]) -> str:
@@ -163,27 +184,90 @@ def _items(lines: list[str], n: int) -> list[str]:
 
 
 def pdf_text_to_lines(text: str) -> str:
-    """pdfminer's text, with list items made whole again. pdfminer puts a list's bullet marks in a text
-    box of their own, before the items, and keeps line wrapping; the import parser needs "- item" lines.
-    Only line breaks and bullet marks change: every word stays as extracted, in order."""
-    out: list[str] = []
-    pending = 0
-    for block in re.split(r"\n\s*\n", text):
-        lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
+    """Like `pdf_boxes_to_lines`, from plain text with blank lines between text boxes and no positions."""
+    boxes = [[(None, None, _clean(ln)) for ln in block.split("\n") if _clean(ln)] for block in re.split(r"\n\s*\n", text)]
+    return pdf_boxes_to_lines(boxes)
+
+
+Line = tuple  # (left edge or None, right edge or None, text)
+
+
+def pdf_boxes_to_lines(boxes: list[list[Line]]) -> str:
+    """pdfminer's text boxes as lines the import parser reads, with list items ("- item") and wrapped
+    paragraphs made whole again. Only line breaks and bullet marks change: every word stays as
+    extracted, in order.
+
+    Bullets come two ways. Some PDFs put the marks in a box of their own, before the items. Others put
+    the mark on the item's first line ("•  Automated ..."); its wrapped lines follow, sometimes in a box
+    of their own, indented under the item's text. Positions decide what continues an item: a line
+    indented right of the mark continues it, a line at the margin (a heading, the next role) doesn't.
+    A plain line that reached the right margin without ending a sentence was wrapped, so the next line
+    of its box continues it. Without positions, only a lowercase start continues an unfinished item."""
+    edges = [(x0, x1) for box in boxes for x0, x1, _ in box if x0 is not None]
+    left = min((a for a, _ in edges), default=None)
+    right = max((b for _, b in edges), default=None)
+
+    def wrapped(end, text) -> bool:
+        return (right is not None and end is not None and not _ENDS_SENTENCE.search(text)
+                and not _HEADER_LINE.search(text) and end >= right - _WRAP_ZONE * (right - left))
+
+    def continues(item: dict, x0, text: str) -> bool:
+        if _MARK.fullmatch(text) or _INLINE_MARK.match(text):
+            return False
+        if x0 is None or item["x"] is None:
+            return text[:1].islower() and not _ENDS_SENTENCE.search(item["text"])
+        if item["indent"] is not None:
+            return abs(x0 - item["indent"]) <= 2
+        return item["x"] + 1 < x0 <= item["x"] + _MAX_INDENT or (x0 <= item["x"] + 1 and wrapped(item["end"], item["text"]))
+
+    entries: list[dict] = []     # {"kind": "item" | "line" | "break", ...}
+    pending = 0                  # bullet marks seen in boxes of their own, waiting for their items
+    item: dict | None = None     # the list item that a following line may continue
+    for box in boxes:
+        lines = [ln for ln in box if ln[2]]
         if not lines:
             continue
-        if all(_MARK.fullmatch(ln) for ln in lines):
+        if all(_MARK.fullmatch(t) for _, _, t in lines):
             pending += len(lines)
+            item = None
             continue
+        entries.append({"kind": "break"})
         if pending:
-            out.append("\n".join(f"- {item}" for item in _items(lines, pending)))
-            pending = 0
+            entries += [{"kind": "item", "text": t} for t in _items([t for _, _, t in lines], pending)]
+            pending, item = 0, None
+            continue
+        prev: dict | None = None  # the plain line before, in this box
+        for x0, x1, t in lines:
+            m = _INLINE_MARK.match(t)
+            if m:
+                item = {"kind": "item", "text": t[m.end():], "x": x0, "end": x1, "indent": None}
+                entries.append(item)
+                prev = None
+            elif item is not None and continues(item, x0, t):
+                item["text"] = _join([item["text"], t])
+                item["end"] = x1
+                if x0 is not None and x0 > (item["x"] or 0) + 1:
+                    item["indent"] = x0
+            elif prev is not None and (prev["text"].endswith("-") and not prev["text"].endswith(" -")
+                                       or wrapped(prev["end"], prev["text"])):
+                prev["text"] = _join([prev["text"], t])   # a broken word or a wrapped paragraph line
+                prev["end"] = x1
+            else:
+                item = None
+                prev = {"kind": "line", "text": t, "end": x1}
+                entries.append(prev)
+
+    out: list[str] = []
+    for e in entries:
+        if e["kind"] == "break":
+            if out and out[-1]:
+                out.append("")
+        elif e["kind"] == "item":
+            if len(out) >= 2 and not out[-1] and out[-2].startswith("- "):
+                out.pop()        # items of one list stay together
+            out.append(f"- {e['text']}")
         else:
-            joined: list[str] = []
-            for ln in lines:   # a word broken at a hyphen (a long link, a hyphenated name) is one word again
-                if joined and joined[-1].endswith("-") and not joined[-1].endswith(" -"):
-                    joined[-1] += ln
-                else:
-                    joined.append(ln)
-            out.append("\n".join(joined))
-    return "\n\n".join(out) + "\n"
+            out.append(e["text"])
+    while out and not out[-1]:
+        out.pop()
+    return "\n".join(out) + "\n"

@@ -80,6 +80,38 @@ def test_role_headers(header, title, company):
     assert (e.title, e.company, e.start, e.end) == (title, company, "2019", "2021")
 
 
+def test_lines_after_the_dates_describe_the_role_and_are_not_read_as_it():
+    e = resume_import.parse_role_header(
+        "QA Manager\nNorthwind Labs | Springfield, IL | 2010 – 2016\n"
+        "Held QA and support roles at several firms, most recently as QA Manager at Northwind Labs.")
+    assert (e.title, e.company, e.location, e.start, e.end) == ("QA Manager", "Northwind Labs", "Springfield, IL", "2010", "2016")
+    assert e.notes == ["Also on the header line, not imported: Held QA and support roles at several firms, "
+                       "most recently as QA Manager at Northwind Labs.."]
+    e = resume_import.parse_role_header("Platform Engineer | 2019 – 2021\nContoso Health")   # company after the dates
+    assert (e.title, e.company) == ("Platform Engineer", "Contoso Health")
+
+
+def test_a_description_before_marked_bullets_is_not_a_bullet():
+    p = resume_import.parse("Experience\n\nQA Manager\nNorthwind Labs | 2010 – 2016\n"
+                            "Northwind Labs builds scheduling software for clinics and hospitals across the whole region.\n"
+                            "- Ran the release testing for every product.\n", "text")
+    assert p.roles[0].bullets == ["Ran the release testing for every product."]
+    assert "scheduling software" in p.roles[0].notes[-1]
+    prose = resume_import.parse("Experience\n\nQA Manager\nNorthwind Labs | 2010 – 2016\n"
+                                "Ran the release testing for every product we shipped in those six busy years there.\n", "text")
+    assert len(prose.roles[0].bullets) == 1      # a prose-style resume: the line is the bullet
+
+
+def test_an_unknown_heading_in_capitals_ends_the_skills():
+    p = resume_import.parse("SKILLS\n\n- Automation: Ansible, Bash\n\nHOME LAB & SIDE PORTFOLIO\n\n"
+                            "- Run a three-node cluster at home.\n\nEDUCATION\n\nBS in Computer Science, Example University\n", "text")
+    assert [(s.name, s.items) for s in p.skills] == [("Automation", ["Ansible", "Bash"])]
+    assert "HOME LAB & SIDE PORTFOLIO" in p.skipped_sections and p.education
+    top = resume_import.parse("ALEX MORGAN\nalex@example.com\n\nEXPERIENCE\n\nEngineer | NORTHWIND LABS | 2019 – 2021\n"
+                              "- Ran builds.\n", "text")
+    assert not top.skipped_sections and top.roles[0].company == "NORTHWIND LABS"
+
+
 def test_an_unclear_header_is_flagged_not_guessed_silently():
     e = resume_import.parse_role_header("Example Group | Quality Lead | 2020 – 2022")
     assert (e.title, e.company) == ("Quality Lead", "Example Group") and not e.notes

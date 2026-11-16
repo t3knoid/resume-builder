@@ -189,7 +189,16 @@ def _section_kind(line: str) -> tuple[str | None, str] | None:
         # Any other top-level Markdown heading names a section we don't import, unless it sits inside
         # experience or projects, where headings are entry headers (decided by the caller).
         return "unknown", raw.rstrip(": ")
+    if not m and _CAPS_HEADING.fullmatch(raw) and not BULLET.match(line) and not DATE_RANGE.search(raw):
+        # In plain text (a PDF), a short line in capitals is a heading too ("HOME LAB & PORTFOLIO").
+        # The caller ignores it at the top (the name) and in sections where capitals may name a
+        # company, school or issuer; after a summary or skills it ends that section.
+        return "unknown_caps", raw.rstrip(": ")
     return None
+
+
+# Two to six words in capitals (spaces, & / ' - allowed, no digits), at least four letters.
+_CAPS_HEADING = re.compile(r"(?=(?:.*[A-Z]){4})[A-Z][A-Z&/'’-]*(?: [A-Z&/'’-]+){1,5}:?")
 
 
 # ---------------------------------------------------------------- dates
@@ -278,7 +287,30 @@ def _peel_locations(e: Entry, parts: list[str]) -> list[str]:
 
 def parse_role_header(header: str, is_company=lambda name: False) -> Entry:
     """Title, company, location and dates from a role's header lines. `is_company(name)` says whether
-    a name is a company in the user's registry, which settles which part is which."""
+    a name is a company in the user's registry, which settles which part is which.
+
+    Lines after the one with the dates ("Official title: ...", a sentence about the company) don't
+    name the role when the lines up to the dates already give a title and a company: they are noted,
+    not read, so a sentence such as "... most recently as QA Manager at Example Corp." can't be taken
+    for "title at company"."""
+    lines = [ln for ln in header.split("\n") if ln.strip()]
+    dated = next((i for i, ln in enumerate(lines) if DATE_RANGE.search(_clean(ln))), None)
+    if dated is not None and dated < len(lines) - 1:
+        e = _parse_role_header("\n".join(lines[: dated + 1]), is_company)
+        if e.title and e.company:
+            e.header = header
+            extra = [_clean(ln) for ln in lines[dated + 1:]]
+            note = "Also on the header line, not imported: "
+            old = next((n for n in e.notes if n.startswith(note)), None)
+            if old:
+                e.notes.remove(old)
+                extra = [old[len(note):].rstrip("."), *extra]
+            e.notes.append(note + " | ".join(extra) + ".")
+            return e
+    return _parse_role_header(header, is_company)
+
+
+def _parse_role_header(header: str, is_company) -> Entry:
     e = Entry(header=header)
     text = _clean(header.replace("\n", " | "))
     e.start, e.end, rest = take_dates(text)
@@ -347,6 +379,17 @@ def _blocks(lines: list[str]) -> list[tuple[list[str], list[str]]]:
     entries: list[tuple[list[str], list[str]]] = []
     header: list[str] = []
     bullets: list[str] = []
+    prose_first = 0   # long plain lines right after the header, before any marked bullet
+
+    def close() -> None:
+        # When marked bullets follow, the prose before them describes the role or company (a line
+        # under the header), so it goes with the header rather than becoming a bullet.
+        nonlocal header, bullets, prose_first
+        if prose_first and len(bullets) > prose_first:
+            header, bullets = header + bullets[:prose_first], bullets[prose_first:]
+        entries.append((header, bullets))
+        header, bullets, prose_first = [], [], 0
+
     for line in lines:
         if not line.strip():
             continue
@@ -360,14 +403,15 @@ def _blocks(lines: list[str]) -> list[tuple[list[str], list[str]]]:
             continue
         prose = len(clean.split()) > 14 and not DATE_RANGE.search(clean) and not re.match(r"^\s*#", line)
         if prose and header:
+            if len(bullets) == prose_first:
+                prose_first += 1
             bullets.append(clean)
             continue
         if bullets:
-            entries.append((header, bullets))
-            header, bullets = [], []
+            close()
         header.append(clean)
     if header or bullets:
-        entries.append((header, bullets))
+        close()
     return entries
 
 
@@ -501,9 +545,11 @@ def parse(text: str, fmt: str = "auto", is_company=lambda name: False, name: str
     for line in body.split("\n"):
         found = _section_kind(line) if line.strip() else None
         current = sections[-1][0]
-        if found and not (found[0] == "unknown" and current in ("experience", "projects")):
+        ignore = {"unknown": ("experience", "projects"),
+                  "unknown_caps": ("header", "experience", "projects", "education", "certifications")}
+        if found and current not in ignore.get(found[0], ()):
             kind, heading = found
-            sections.append((None if kind == "unknown" else kind, heading, []))
+            sections.append((None if kind in ignore else kind, heading, []))
         else:
             sections[-1][2].append(line)
 
