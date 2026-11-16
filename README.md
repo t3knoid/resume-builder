@@ -2,6 +2,10 @@
 
 Keep one honest, evidence-backed record of your career, and build a tailored resume, cover letter or short application answer for each job from it, without the AI inventing claims. Track every application from first interest to outcome, and rebuild any document you ever sent, exactly.
 
+![The job tracker's Applications page: four jobs with their company, title, stage, date applied, next action and a stale flag](docs/images/tracker.png)
+
+*The local job tracker at `http://localhost:8000`, showing the fictional example user.*
+
 ## Works with your AI assistant (MCP server)
 
 resume-builder is an **MCP server**. Connect Claude Code, Claude Desktop, Gemini CLI, Codex CLI or GitHub Copilot in VS Code, and your assistant gets resume-builder's tools. It reads a job's brief (`agent_brief`), picks bullets for a tailored resume (`profile_write`), and drafts fit reports, cover letters and application answers (`document_propose`). It can also propose new jobs and tracker events.
