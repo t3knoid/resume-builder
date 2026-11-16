@@ -1,10 +1,22 @@
-{# Copy-ready rb commands (issue #36). `c` is {"lines": [{"label", "text"}], "note"} from api.shown(). #}
+{# Copy-ready rb commands (issue #36) and assistant prompts (issue #37).
+   `c` is {"lines": [{"label", "text"}], "note"} from api.shown(); `p` comes from api.shown_prompt(). #}
 {% macro command(c) -%}
 <div class="cmd">{% for l in c.lines %}<div class="cmd-line">{% if l.label %}<span class="code-label">{{ l.label }}</span> {% endif %}<code>{{ l.text }}</code><button type="button" class="copy" data-copy="{{ l.text }}" hidden>Copy</button></div>{% endfor %}{% if c.note %}<div class="muted cmd-note">{{ c.note }}</div>{% endif %}</div>
 {%- endmacro %}
 
+{% macro prompt(p, heading=true) -%}
+<div class="prompt">{% if heading %}<h3>{{ p.title }}</h3><p class="muted cmd-note">{{ p.description }}</p>{% endif %}
+{% if p.text %}
+{% if p.before %}<p class="prompt-step">Run this and copy everything it prints into the chat first:</p>{% for c in p.before %}{{ command(c) }}{% endfor %}<p class="prompt-step">Then paste this prompt:</p>{% endif %}
+<div class="prompt-box"><pre>{{ p.text }}</pre><button type="button" class="copy" data-copy="{{ p.text }}" hidden>Copy prompt</button></div>
+{% if p.after %}<p class="prompt-step">Copy each block it gives back, then run:</p>{% for c in p.after %}{{ command(c) }}{% endfor %}{% endif %}
+{% else %}<p class="muted">This needs a connected assistant (its resume-builder tools). Without one, run:</p>{% for c in p.instead %}{{ command(c) }}{% endfor %}
+{% endif %}</div>
+{%- endmacro %}
+
 {% macro next_steps(steps, user) -%}
 {% if steps %}<ol class="steps">{% for s in steps %}<li><p>{{ s.text }}{% if s.file %} <span class="muted">File: <code>{{ s.file }}</code></span>{% endif %}</p>
+{% for p in s.prompts %}<p class="prompt-step">Ask your assistant:</p>{{ prompt(p, heading=false) }}{% endfor %}
 {% for c in s.commands %}{{ command(c) }}{% endfor %}</li>{% endfor %}</ol>
 {% else %}<p class="muted">Nothing to do for this job right now.</p>{% endif %}
 {%- endmacro %}

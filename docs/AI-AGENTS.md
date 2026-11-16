@@ -13,7 +13,7 @@ Whatever the assistant, it works as the **agent**: it can only propose drafts, a
 5. [ChatGPT](#5-chatgpt): Codex CLI, ChatGPT in the browser or app
 6. [Copilot](#6-copilot): GitHub Copilot in VS Code, Copilot CLI, Microsoft Copilot
 7. [Other tools](#7-other-tools)
-8. [A typical session](#8-a-typical-session)
+8. [A typical session](#8-a-typical-session), including [ready-made prompts](#ready-made-prompts)
 9. [Reviewing what the agent did](#9-reviewing-what-the-agent-did)
 10. [Troubleshooting](#10-troubleshooting)
 
@@ -672,13 +672,28 @@ back as HTTP 422 with a `problems` list.
 7. **Later:** paste a recruiter's email to the agent. It proposes an event; you confirm it with
    `rb confirm-event <n>`.
 
-Good prompts are short and specific:
+### Ready-made prompts
 
-- "Tailor job `<job-id>`: brief, profile, fit report. List the gaps as questions for me."
-- "Draft a why-here answer for `<job-id>` under 100 words. Use my interest notes for the first sentence."
-- "This recruiter email arrived for `<job-id>`; propose the right event: …"
-- "Compare my last two resume snapshots for `<job-id>` and tell me what changed."
-- "Start a job for this posting: <link>." (MCP or API agents)
+You don't have to work out what to ask. The agent can only do a few things, so resume-builder comes with a prompt for each, filled in for your job:
+
+- **Website:** the **Prompts** page (top menu) has them all, filled in for the job you pick, with a **Copy prompt** button. Choose whether your assistant is connected (it has resume-builder's tools) or a chat you copy and paste into; the page starts with the one your AI agent status suggests. For copy and paste, it also shows the `rb brief` command to run first and the `rb propose` commands that bring each answer back. A job's **Next steps** show the prompt where the next step is your assistant's.
+- **Your assistant:** connected assistants get them as MCP prompts, which many offer as slash commands. In Claude Code, type `/` and look for `/mcp__resume-builder__tailor` and the others; it asks for the job id. Gemini CLI and Copilot in VS Code list MCP prompts too.
+- **Terminal:** `rb prompts <job-id>` prints them all; `--name tailor` prints one, and `--for connected` or `--for paste` picks the wording.
+
+| Prompt | Name | What the assistant does |
+| --- | --- | --- |
+| Tailor my resume for a job | `tailor` | Reads the brief, saves a tailored profile and a fit report, and asks you its questions |
+| Redo the drafts after answering questions | `redo` | Proposes new facts from your answers as draft bullets, then updates the profile and fit report |
+| Draft a cover letter | `cover-letter` | A 250–350 word letter from the tailored profile, every claim cited |
+| Draft the "why do you want to work here" answer | `why-here` | Up to 100 words |
+| Draft a short message to the hiring team | `hiring-team` | A few lines in place of a cover letter |
+| Add a job from its link | `add-job` | Proposes the job for you to confirm (connected assistants only) |
+| Record a recruiter's email | `record-email` | Proposes an event from the email, without setting a stage (connected assistants only) |
+| Turn notes into resume bullets | `notes-to-bullets` | Draft bullets for one role or project, no estimated numbers |
+| Review my bullets | `review-bullets` | Suggested rewrites against the writing rules; saves nothing |
+| Update my public resume | `public-profile` | Picks confirmed items for your general resume, older roles condensed |
+
+The prompts ask only for what the agent may do anyway, and resume-builder's checks still decide what it accepts. Rewording a prompt can't get anything past them. Your own short requests work just as well, for example "Compare my last two resume snapshots for `<job-id>` and tell me what changed."
 
 ### Answering the agent's questions
 

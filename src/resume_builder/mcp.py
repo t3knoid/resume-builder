@@ -15,7 +15,7 @@ import json
 import sys
 from typing import Any, TextIO
 
-from . import __version__
+from . import __version__, prompts
 from . import services, sync_ops  # noqa: F401  (registers operations)
 from . import sync as sync_mod
 from .errors import AppError
@@ -89,7 +89,7 @@ class McpServer:
                 version = requested if requested in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0]
                 result = {
                     "protocolVersion": version,
-                    "capabilities": {"tools": {"listChanged": False}},
+                    "capabilities": {"tools": {"listChanged": False}, "prompts": {"listChanged": False}},
                     "serverInfo": {"name": "resume-builder", "version": __version__},
                     "instructions": agent_instructions("mcp").replace("<job-id>", "the job id"),
                 }
@@ -100,6 +100,15 @@ class McpServer:
             elif method == "tools/call":
                 params = msg.get("params") or {}
                 result = self.call(params.get("name", ""), params.get("arguments") or {})
+            elif method == "prompts/list":   # ready-made requests the client offers as slash commands (#37)
+                result = {"prompts": prompts.mcp_list()}
+            elif method == "prompts/get":
+                params = msg.get("params") or {}
+                args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+                try:
+                    result = prompts.mcp_get(str(params.get("name", "")), args)
+                except (KeyError, prompts.MissingArgument) as exc:
+                    return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": str(exc).strip("'\"")}}
             else:
                 return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"Method not found: {method}"}}
         except Exception as exc:  # never crash the session

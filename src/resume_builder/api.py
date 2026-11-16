@@ -350,17 +350,52 @@ def _website(api: FastAPI, app: App) -> None:
             out.append({"lines": rbcmd.lines(c, flag), "note": c.note})
         return out
 
-    def next_steps(user: str, job_id: str) -> list[dict]:
-        return [{**s, "commands": shown(s["commands"], user)} for s in run(user, "job_next_steps", {"job_id": job_id})]
+    from . import prompts as rbprompts
 
-    @api.get("/u/{user}/commands", response_class=HTMLResponse, include_in_schema=False)
-    def commands_page(request: Request, user: str, job: str | None = None):
+    def prompt_mode(user: str, asked: str | None = None) -> str:
+        return asked if asked in rbprompts.MODES else rbprompts.preferred_mode(run(user, "agent_status")["state"])
+
+    def shown_prompt(user: str, name: str, values: dict, mode: str) -> dict:
+        """One prompt, ready to show: its text in `mode`, and the rb commands around it."""
+        p = rbprompts.BY_NAME[name]
+        body = rbprompts.text(p, mode, values)
+        return {"name": p.name, "title": p.title, "description": p.description, "text": body,
+                "before": shown(rbprompts.commands(p.before, values), user) if body and mode == rbprompts.PASTE else [],
+                "after": shown(rbprompts.commands(p.after, values), user) if body and mode == rbprompts.PASTE else [],
+                "instead": shown(rbprompts.commands(p.instead, values), user) if body is None else []}
+
+    def next_steps(user: str, job_id: str, mode: str | None = None) -> list[dict]:
+        mode = mode or prompt_mode(user)
+        out = []
+        for s in run(user, "job_next_steps", {"job_id": job_id}):
+            ps = [shown_prompt(user, p["name"], p["values"], mode) for p in s.get("prompts", [])]
+            out.append({**s, "commands": shown(s["commands"], user), "prompts": [p for p in ps if p["text"]]})
+        return out
+
+    def picked_job(user: str, job: str | None) -> tuple[list[dict], str | None]:
+        """Open jobs for a picker, and the chosen one (default: the newest). 404 for an unknown job."""
         jobs = [j for j in run(user, "job_list", {}) if j["stage"] not in FINAL_STAGES]
         ids = [j["job_id"] for j in jobs]
         if job and job not in ids:
             run(user, "job_get", {"job_id": job})          # 404 for an unknown job; closed jobs are fine
             ids.append(job)
-        job = job or (ids[0] if ids else None)
+        return jobs, job or (ids[0] if ids else None)
+
+    @api.get("/u/{user}/prompts", response_class=HTMLResponse, include_in_schema=False)
+    def prompts_page(request: Request, user: str, job: str | None = None, mode: str | None = None):
+        """Ready-made prompts for the user's AI assistant (issue #37), filled in for the chosen job."""
+        jobs, job = picked_job(user, job)
+        mode = prompt_mode(user, mode)
+        values = {"job_id": job} if job else {}
+        groups: dict[str, list] = {}
+        for p in rbprompts.PROMPTS:
+            groups.setdefault(p.group, []).append(shown_prompt(user, p.name, values, mode))
+        return page(request, "prompts.html", user=user, jobs=jobs, job=job, mode=mode, groups=groups,
+                    detected=rbprompts.preferred_mode(run(user, "agent_status")["state"]))
+
+    @api.get("/u/{user}/commands", response_class=HTMLResponse, include_in_schema=False)
+    def commands_page(request: Request, user: str, job: str | None = None):
+        jobs, job = picked_job(user, job)
         resumes = run(user, "snapshot_list", {"job_key": job, "doc_type": "resume"}) if job else []
         resumes = [r for r in resumes if not r["preview"]]
         letter = next((d["approved_snapshot"] for d in (run(user, "document_list", {"job_id": job}) if job else [])

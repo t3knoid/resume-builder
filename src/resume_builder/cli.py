@@ -30,7 +30,36 @@ def _print(obj) -> None:
         print(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
 
 
-def _print_steps(steps: list[dict], user: str | None) -> None:
+def _print_commands(cs, user: str | None, indent: str = "   ") -> None:
+    from .commands import Command, lines
+    for c in cs:
+        c = c if isinstance(c, Command) else Command.from_dict(c)
+        for line in lines(c, user):
+            print(f"{indent}{line['label'] + ': ' if line['label'] else ''}{line['text']}" + (f"   # {c.note}" if c.note else ""))
+
+
+def _print_prompt(name: str, values: dict, mode: str, user: str | None, indent: str = "   ") -> None:
+    from . import prompts as rbprompts
+    p = rbprompts.BY_NAME[name]
+    body = rbprompts.text(p, mode, values)
+    if body is None:
+        print(f"{indent}Needs a connected assistant. Without one, run:")
+        _print_commands(rbprompts.commands(p.instead, values), user, indent)
+        print()
+        return
+    if mode == rbprompts.PASTE and p.before:
+        print(f"{indent}Run this and paste everything it prints into the chat first:")
+        _print_commands(rbprompts.commands(p.before, values), user, indent)
+        print(f"{indent}Then paste this prompt:")
+    for line in body.splitlines():
+        print(f"{indent}| {line}" if line else f"{indent}|")
+    if mode == rbprompts.PASTE and p.after:
+        print(f"{indent}Copy each block it gives back, then run:")
+        _print_commands(rbprompts.commands(p.after, values), user, indent)
+    print()
+
+
+def _print_steps(steps: list[dict], user: str | None, mode: str = "paste") -> None:
     from .commands import Command, lines
     if not steps:
         print("Nothing to do for this job right now.")
@@ -38,6 +67,11 @@ def _print_steps(steps: list[dict], user: str | None) -> None:
         print(f"{i}. {step['text']}")
         if step["file"]:
             print(f"   File: {step['file']}")
+        for p in step.get("prompts", []):
+            from . import prompts as rbprompts
+            if rbprompts.text(rbprompts.BY_NAME[p["name"]], mode, p["values"]):
+                print("   Ask your assistant:")
+                _print_prompt(p["name"], p["values"], mode, user, "     ")
         for c in step["commands"]:
             for line in lines(Command.from_dict(c), user):
                 print(f"   {line['label'] + ': ' if line['label'] else ''}{line['text']}" + (f"   # {c['note']}" if c["note"] else ""))
@@ -370,6 +404,11 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("job_id")
     nx = cmd("next", "What to do next for a job, with the commands to run.")
     nx.add_argument("job_id")
+    pp = cmd("prompts", "Ready-made prompts for your AI assistant, filled in for a job.")
+    pp.add_argument("job_id", nargs="?", help="fill in this job (default: placeholders)")
+    pp.add_argument("--for", dest="mode", choices=["connected", "paste"],
+                    help="connected (MCP tools) or paste (a chat assistant); default: from the AI agent status")
+    pp.add_argument("--name", help="only this prompt, e.g. tailor")
     e = cmd("event", "Add an event to an application.")
     e.add_argument("job_id")
     e.add_argument("--type", default="stage_change", choices=["stage_change", "interview", "follow_up_sent", "message_received", "note", "document_sent", "correction"])
@@ -588,7 +627,23 @@ def _run(app: App, args) -> int | None:
     elif c == "show":
         _print(op("job_get", {"job_id": args.job_id}))
     elif c == "next":
-        _print_steps(op("job_next_steps", {"job_id": args.job_id}), args.user)
+        from . import prompts as rbprompts
+        _print_steps(op("job_next_steps", {"job_id": args.job_id}), args.user,
+                     rbprompts.preferred_mode(op("agent_status")["state"]))
+    elif c == "prompts":
+        from . import prompts as rbprompts
+        if args.job_id:
+            op("job_get", {"job_id": args.job_id})       # an unknown job is an error, not a silent placeholder
+        mode = args.mode or rbprompts.preferred_mode(op("agent_status")["state"])
+        chosen = [p for p in rbprompts.PROMPTS if not args.name or p.name == args.name]
+        if not chosen:
+            raise AppError(f"No prompt `{args.name}`. Prompts: {', '.join(rbprompts.BY_NAME)}.")
+        values = {"job_id": args.job_id} if args.job_id else {}
+        print(f"Prompts for {'an assistant connected to the tools' if mode == 'connected' else 'a chat assistant (copy and paste)'}"
+              f" (--for {'paste' if mode == 'connected' else 'connected'} for the other kind).\n")
+        for p in chosen:
+            print(f"== {p.title}  [{p.name}]")
+            _print_prompt(p.name, values, mode, args.user)
     elif c == "event":
         ev = {"date": args.date or date.today().isoformat(), "type": args.type, "stage": args.stage,
               "notes": args.notes, "contact": args.contact, "documents": args.documents, "corrects": args.corrects}

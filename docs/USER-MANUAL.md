@@ -654,6 +654,7 @@ Open [http://localhost:8000](http://localhost:8000) (or your `RB_HOST_PORT`). It
 - **Help:** the **Help** link at the top of every page opens these guides (quick start, this manual, and working with an AI agent) in a separate help window. Clicking a help link again brings that window to the front and shows the new page instead of opening another one. A small **?** next to some headings (sync status, the AI agent card, proposed jobs, signing in) opens help at the matching section, and the help window has a search box. The help comes with your version of resume-builder and works without an internet connection. If your browser blocks pop-ups, help opens in a single reused tab instead.
 - **Dashboard:** applications per week, response rate, median days to first response, how far applications got, outcomes by source, response rate with and without a cover letter, and the bullets that appear most in resumes that reached interviews.
 - **Commands:** every everyday `rb` command, ready to copy (below).
+- **Prompts:** what to ask your AI assistant, filled in for a job and ready to copy (see [ready-made prompts](AI-AGENTS.md#ready-made-prompts)).
 
 ### The Commands page
 
@@ -778,6 +779,8 @@ Review proposed events with `rb event-drafts`, then `rb confirm-event <n>` or `r
 
 An MCP or API agent can also **propose a new job**: give it the posting's link and it calls `job_intake_propose`. The app fetches the posting itself and rejects any value the posting doesn't state. Nothing is created until you review it: `rb job-drafts` lists what's waiting (so do `rb status` and `SYNC-STATUS.md`), and `rb confirm-job <n>` shows the same preview and questions as `rb new-job <url>` (it takes the same options, such as `--company` and `--yes`). `rb discard-job <n>` drops one. Everything the agent does is in the audit log (`rb audit`), marked as the agent.
 
+Not sure what to ask? The website's **Prompts** page and `rb prompts <job-id>` have a ready-made prompt for everything the agent can do, filled in for your job, and connected assistants offer them as slash commands (see [ready-made prompts](AI-AGENTS.md#ready-made-prompts)).
+
 ### Answering the agent's questions
 
 The agent asks when your library doesn't say something it needs: a missing metric, whether a requirement is a real gap, why you want the job. It never guesses, so its questions are the way to fill those holes. They also stay in the job's `fit-report.md` under "Questions for the user", so you can answer later.
@@ -823,6 +826,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb list [--stage --company --all]`                                                | List applications                                   |
 | `rb show <job-id>`                                                                 | One application in full                             |
 | `rb next <job-id>`                                                                 | What to do next for a job, with the commands to run |
+| `rb prompts [<job-id>] [--name --for connected\|paste]`                             | Ready-made prompts for your AI assistant            |
 | `rb event <job-id> [--type --stage --date --notes --documents --corrects]`         | Add an event                                        |
 | `rb job-drafts` / `confirm-job <n>` / `discard-job <n>`                        | Jobs proposed by the agent                          |
 | `rb event-drafts` / `confirm-event <n>` / `discard-event <n>`                  | Events proposed by the agent                        |

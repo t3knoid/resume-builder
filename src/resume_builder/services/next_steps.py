@@ -30,8 +30,10 @@ class JobIn(BaseModel):
     job_id: str
 
 
-def _step(key: str, text: str, commands: list[Command] = (), file: str | None = None) -> dict:
-    return {"key": key, "text": text, "file": file, "commands": [c.to_dict() for c in commands]}
+def _step(key: str, text: str, commands: list[Command] = (), file: str | None = None, prompts: tuple = ()) -> dict:
+    """`prompts`: (name, values) for the assistant prompts that do this step (prompts.py, issue #37)."""
+    return {"key": key, "text": text, "file": file, "commands": [c.to_dict() for c in commands],
+            "prompts": [{"name": name, "values": values} for name, values in prompts]}
 
 
 def _latest(space: UserSpace, job_id: str, doc_type: str) -> str | None:
@@ -84,7 +86,8 @@ def steps_for(space: UserSpace, job_id: str) -> list[dict]:
         steps.append(_step("tailor", "Tailor the resume. With a connected assistant, ask it to use the resume-builder tools "
                            f"for job {job_id}. With a chat assistant, paste the brief in and pipe back each block it returns.",
                            [cmd("brief", job_id), cmd("propose", job_id, "profile", clipboard=True),
-                            cmd("propose", job_id, "fit_report", clipboard=True)]))
+                            cmd("propose", job_id, "fit_report", clipboard=True)],
+                           prompts=(("tailor", {"job_id": job_id}),)))
     else:
         from .render import resolve_resume
         try:
@@ -139,9 +142,12 @@ def _after_applying(space: UserSpace, job_id: str) -> list[dict]:
     if days is not None and days >= space.user_settings.tracker.stale_days:
         return [_step("stale", f"No news for {days} days. Follow up, or record what happened. You decide the stage; "
                       "the app never changes it.",
-                      [cmd("event", job_id, "--type", "follow_up_sent", "--notes", "<what you sent>"), *record])]
-    return [_step("record", "Record what happens next as it happens.",
-                  [*record, cmd("event", job_id, "--type", "interview", "--notes", "<who and how it went>")])]
+                      [cmd("event", job_id, "--type", "follow_up_sent", "--notes", "<what you sent>"), *record],
+                      prompts=(("record-email", {"job_id": job_id}),))]
+    return [_step("record", "Record what happens next as it happens. With a connected assistant, paste a recruiter's "
+                  "email in and it proposes the event for you to confirm.",
+                  [*record, cmd("event", job_id, "--type", "interview", "--notes", "<who and how it went>")],
+                  prompts=(("record-email", {"job_id": job_id}),))]
 
 
 @operation("job_next_steps", "application:read", JobIn,

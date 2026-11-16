@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_commands.html" import prompt %}
+{% block title %}Prompts · {{ user }}{% endblock %}
+{% block body %}
+<h1>Prompts <a class="help-link" href="/help/ai-agents#ready-made-prompts" target="rb-help" data-help title="Help: ready-made prompts">?</a></h1>
+<p class="muted">What to ask your AI assistant, ready to copy. Replace anything in <code>&lt;angle brackets&gt;</code> first. Your assistant's answers are drafts: you check and confirm them, and resume-builder's own checks still apply.</p>
+<form method="get" class="filters card">
+{% if jobs %}<label>Fill in prompts for job
+<select name="job">{% for j in jobs %}<option value="{{ j.job_id }}"{% if j.job_id == job %} selected{% endif %}>{{ j.job_id }}{% if j.title %} · {{ j.title }}{% endif %}</option>{% endfor %}
+{% if job and job not in jobs | map(attribute="job_id") | list %}<option value="{{ job }}" selected>{{ job }}</option>{% endif %}</select></label>{% endif %}
+<label>My assistant
+<select name="mode"><option value="connected"{% if mode == "connected" %} selected{% endif %}>is connected (MCP tools)</option>
+<option value="paste"{% if mode == "paste" %} selected{% endif %}>is a chat (copy and paste)</option></select></label>
+<button>Show</button></form>
+<p class="muted">{% if mode == "connected" %}Showing prompts for an assistant connected to resume-builder's tools (Claude Code, Claude Desktop, Gemini CLI, Codex CLI, Copilot in VS Code). Many of these offer them as slash commands too, such as <code>/mcp__resume-builder__tailor</code> in Claude Code.{% else %}Showing prompts for a chat assistant used with copy and paste (claude.ai, ChatGPT, Gemini, Microsoft Copilot).{% endif %}{% if mode != detected %} Your AI agent status suggests the other kind.{% endif %}</p>
+{% for title, items in groups.items() %}<div class="card"><h2>{{ title }}</h2>
+{% for p in items %}{{ prompt(p) }}{% endfor %}
+</div>{% endfor %}
+{% endblock %}

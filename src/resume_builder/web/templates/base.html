@@ -41,13 +41,15 @@ a.external::after { content:" \2197"; font-size:11px; }
 .cmd { margin:6px 0 10px; } .cmd-line { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:2px 0; }
 .cmd-line code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:2px 6px; font-size:13px; overflow-wrap:anywhere; }
 .cmd-line .code-label { margin:0; } button.copy { font-size:12px; padding:1px 8px; cursor:pointer; } .cmd-note { font-size:13px; }
+.prompt { margin:8px 0 16px; } .prompt h3 { font-size:15px; margin:0; } .prompt-step { font-size:13px; margin:6px 0 2px; }
+.prompt-box { display:flex; gap:8px; align-items:flex-start; } .prompt-box pre { flex:1; margin:4px 0; max-height:none; font-size:13px; }
 ol.steps { padding-left:20px; margin:0; } ol.steps > li > p { margin:4px 0; }
 </style>
 </head>
 <body>
 {% block header %}<header class="top">
   <a class="brand" href="/">resume-builder</a>
-  {% if user %}<a href="/u/{{ user }}/">Home</a><a href="/u/{{ user }}/applications">Applications</a><a href="/u/{{ user }}/dashboard">Dashboard</a><a href="/u/{{ user }}/proposals">Proposed jobs</a><a href="/u/{{ user }}/commands">Commands</a>{% endif %}
+  {% if user %}<a href="/u/{{ user }}/">Home</a><a href="/u/{{ user }}/applications">Applications</a><a href="/u/{{ user }}/dashboard">Dashboard</a><a href="/u/{{ user }}/proposals">Proposed jobs</a><a href="/u/{{ user }}/commands">Commands</a><a href="/u/{{ user }}/prompts">Prompts</a>{% endif %}
   <span class="muted" style="margin-left:auto;font-size:12px">v{{ version }} ·
   {% if user and signed_in %}signed in <form method="post" action="/u/{{ user }}/logout" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button style="font-size:12px;padding:1px 6px">Sign out</button></form>
   {% elif user %}read-only · <a href="/u/{{ user }}/login">Sign in</a>{% else %}read-only{% endif %} · <a href="/help" target="rb-help" data-help>Help</a> · <a href="/docs">API</a></span>
