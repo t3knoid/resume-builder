@@ -69,7 +69,7 @@ def check_document(space: UserSpace, job_id: str, kind: str, text: str, owner_ed
     lib = space.repo.load_library()
     bullets = lib.all_bullets()
     phrases = {s.id: s for s in lib.summary_phrases}
-    allowed = {b for ids in list(profile.roles.values()) + list(profile.projects.values()) for b in ids} | set(profile.summary)
+    allowed = profile.bullet_ids() | set(profile.summary)  # earlier experience is on the resume too
     terms = _terms(space)
     # Motivation may use the user's own words from interest_notes without a citation (R9.3).
     notes = (space.repo.get_application(job_id).interest_notes or "").lower()

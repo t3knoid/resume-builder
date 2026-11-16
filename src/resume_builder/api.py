@@ -651,7 +651,8 @@ def _confirm_payload(form, preview: dict, from_user: dict | None = None) -> dict
 def _profile_diff(public: dict | None, job: dict | None) -> dict | None:
     if not public or not job:
         return None
-    pub_b = {b for ids in list(public["roles"].values()) + list(public["projects"].values()) for b in ids}
-    job_b = {b for ids in list(job["roles"].values()) + list(job["projects"].values()) for b in ids}
+    from .models import Profile
+
+    pub_b, job_b = Profile.model_validate(public).bullet_ids(), Profile.model_validate(job).bullet_ids()
     return {"added": sorted(job_b - pub_b), "removed": sorted(pub_b - job_b),
             "keywords": job.get("keywords", []), "gaps": job.get("gaps", [])}

@@ -279,6 +279,10 @@ class Profile(Strict):
     omitted_roles: list[OmittedRole] = Field(default_factory=list)
     gaps: list[Gap] = Field(default_factory=list)
 
+    def bullet_ids(self) -> set[str]:
+        """Every bullet the tailored resume shows: under roles, projects and earlier experience."""
+        return {b for group in (self.roles, self.projects, self.earlier_roles) for ids in group.values() for b in ids}
+
 
 # ---------------------------------------------------------------- application.yaml
 

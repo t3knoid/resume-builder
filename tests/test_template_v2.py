@@ -126,3 +126,18 @@ def test_bold_markup_is_bold_in_styled_and_plain_in_ats(app, sample, owner):
 def test_template_v1_still_renders_new_snapshots(app, sample, owner):
     html = _html(app, sample, owner, template_version=1)
     assert "Senior Platform Engineer" in html and "**" not in html
+
+
+# ---------------------------------------------------------------- earlier experience counts as on the resume
+
+def test_bullet_ids_include_earlier_roles(sample):
+    profile = _profile(sample, roles={"role-fabrikam": ["fab-ci-pipeline"]}, earlier_roles={"role-tailspin": ["tail-backup"]})
+    assert {"fab-ci-pipeline", "lab-llm-server", "tail-backup"} <= profile.bullet_ids()
+
+
+def test_letters_may_cite_bullets_under_earlier_roles(sample, agent):
+    profile = _profile(sample, roles={"role-fabrikam": ["fab-ci-pipeline"]}, earlier_roles={"role-tailspin": ["tail-backup"]})
+    invoke(sample.app, agent, "profile_write", {"key": JOB, "profile": profile.model_dump(mode="json")})
+    out = invoke(sample.app, agent, "document_propose", {
+        "job_id": JOB, "kind": "answer", "text": "I rebuilt the backups with weekly restore tests [cite: tail-backup]."})
+    assert not any("tailored resume" in str(p) for p in out.get("warnings", []))
