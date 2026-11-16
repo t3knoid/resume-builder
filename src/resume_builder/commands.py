@@ -64,10 +64,14 @@ def is_placeholder(arg: str) -> bool:
 
 # ---------------------------------------------------------------- the Commands page
 
-def catalog(job: str | None = None, snapshot: str | None = None) -> list[dict]:
-    """Every everyday command, grouped by task in the order you use them, with the values filled in."""
+def catalog(job: str | None = None, snapshot: str | None = None, letter: str | None = None) -> list[dict]:
+    """Every everyday command, grouped by task in the order you use them, with the values filled in.
+
+    `snapshot` is the job's latest resume snapshot, `letter` its approved cover letter's snapshot.
+    """
     j = job or "<job-id>"
     s = snapshot or "<snapshot-id>"
+    l = letter or "<snapshot-id>"
     return [
         {"title": "Check and sync", "commands": [
             cmd("status", note="Sync problems, example entries left, and whether your AI agent is connected."),
@@ -94,14 +98,21 @@ def catalog(job: str | None = None, snapshot: str | None = None) -> list[dict]:
             cmd("agent-instructions", note="Standing instructions to paste into the assistant's custom instructions once."),
             cmd("token", "--actor", "agent", note="An agent token, for an assistant connected by URL or the HTTP API."),
         ]},
-        {"title": "Render and approve", "commands": [
+        {"title": "Render the resume", "commands": [
             cmd("render", j, "--preview", note="The tailored resume, drafts included and watermarked."),
-            cmd("render", j, note="The tailored resume, ready to send. Its snapshot id is the version you record."),
+            cmd("render", j, note="The tailored resume as a PDF, ready to send. Its snapshot id is the version you record."),
             cmd("render", j, "--ats", note="The plain single-column variant for applicant tracking systems."),
+            cmd("render", j, "--format", "html", note="The tailored resume as a web page instead of a PDF."),
+            cmd("snapshots", j, note="Every saved version of this job's documents, with their ids."),
+            cmd("regenerate", s, note="The latest resume version, rebuilt exactly (the same PDF), into output/."),
+        ]},
+        {"title": "Cover letter and answers", "commands": [
             cmd("approve", j, "cover_letter", note="Approve the cover letter once you've read and edited it."),
+            cmd("render", j, "--type", "cover_letter", note="A PDF of the cover letter as it is now, into output/."),
+            cmd("regenerate", l, note="The approved cover letter's PDF, rebuilt exactly, into output/."),
             cmd("approve", j, "answer", "--slug", "why-here", note="Approve the answer."),
-            cmd("snapshots", j, note="Every saved version of this job's documents."),
-            cmd("regenerate", s, note="Rebuild a saved version exactly, into output/."),
+            cmd("render", j, "--type", "answer", "--slug", "why-here", "--format", "txt",
+                note="The answer as plain text, to paste into an application form."),
         ]},
         {"title": "Track the application", "commands": [
             cmd("event", j, "--stage", "applied", "--documents", s, note="You applied: record it with the versions you sent."),

@@ -109,7 +109,11 @@ def steps_for(space: UserSpace, job_id: str) -> list[dict]:
         file = f"{folder}/{DOC_FILES.get(kind, f'answers/{slug}.md')}"
         approve = cmd("approve", job_id, kind, *(("--slug", slug) if kind == "answer" else ()))
         if d["status"] == "approved" and d["approved_snapshot"]:
-            sent.append(d["approved_snapshot"])
+            sid = d["approved_snapshot"]
+            sent.append(sid)
+            export = [cmd("regenerate", sid)] if kind == "cover_letter" else                 [cmd("regenerate", sid, "--format", "txt", note="Plain text, to paste into an application form.")]
+            steps.append(_step(f"export:{kind}:{slug}", f"The {name} is approved ({sid}). Export it to send: it goes into "
+                               f"output/, in the {job_id} folder.", export))
         elif PLACEHOLDER in (d["text"] or ""):
             steps.append(_step(f"motivation:{kind}:{slug}", f"The {name} still says {PLACEHOLDER}. Replace it with your own "
                                "words, then approve it.", [approve], file=file))

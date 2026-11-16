@@ -4,7 +4,7 @@ Notable changes to resume-builder, newest first. Requirement and decision ids (s
 
 ## Unreleased
 
-- **Copy-ready commands** (#36, R8.12, D34): a new **Commands** page on the tracker lists the everyday `rb` commands by task, filled in with your job's id and its latest resume snapshot id, each with a **Copy** button. Each job's page starts with **Next steps**: only the commands and files that fit where that job is (posting, interest notes, tailoring, draft items to confirm, letters and answers to approve, rendering, recording that you applied, then replies and follow-ups). New command `rb next <job-id>` prints the same, and new read operation `job_next_steps` provides them. Every command shown is checked against the real `rb` parser in the tests.
+- **Copy-ready commands** (#36, R8.12, D34): a new **Commands** page on the tracker lists the everyday `rb` commands by task, filled in with your job's id and its latest resume snapshot id, each with a **Copy** button. Each job's page starts with **Next steps**: only the commands and files that fit where that job is (posting, interest notes, tailoring, draft items to confirm, letters and answers to approve and then export, rendering, recording that you applied, then replies and follow-ups). New command `rb next <job-id>` prints the same, and new read operation `job_next_steps` provides them. Every command shown is checked against the real `rb` parser in the tests.
 - Fix: approving a cover letter or answer suggested `rb export <id>`, a command that doesn't exist; it now says `rb regenerate <id>`.
 - Fix: the help pages showed " 97" after links to the repository instead of the ↗ arrow.
 - README: says up front that resume-builder is an MCP server, what its tools do, and the two ways to connect.

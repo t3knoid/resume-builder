@@ -48,7 +48,7 @@ def test_every_catalog_command_parses_with_and_without_values():
 
 
 def test_values_are_filled_in_and_placeholders_remain_only_where_unknown():
-    text = " ".join(" ".join(c.argv) for g in catalog(JOB, "s-0001") for c in g["commands"])
+    text = " ".join(" ".join(c.argv) for g in catalog(JOB, "s-0001", "s-0002") for c in g["commands"])
     assert "<job-id>" not in text and "<snapshot-id>" not in text and JOB in text and "s-0001" in text
     assert "<link>" in text                                                # the app can't know it
 
@@ -175,3 +175,23 @@ def test_the_copy_script_is_served_and_loaded(client):
     js = client.get("/static/copy.js")
     assert js.status_code == 200 and "navigator.clipboard" in js.text
     assert '<script src="/static/copy.js" defer></script>' in client.get(f"/u/{USER}/commands").text
+
+
+def test_catalog_exports_the_cover_letter():
+    argvs = [list(c.argv) for g in catalog(JOB, "s-0001", "s-0002") for c in g["commands"]]
+    assert ["render", JOB, "--type", "cover_letter"] in argvs
+    assert ["regenerate", "s-0002"] in argvs and ["regenerate", "s-0001"] in argvs
+    assert ["regenerate", "<snapshot-id>"] in [list(c.argv) for g in catalog(JOB, "s-0001") for c in g["commands"]]
+
+
+def test_an_approved_document_gets_an_export_step(sample, owner):
+    sid = invoke(sample.app, owner, "document_approve", {"job_id": JOB, "kind": "answer", "slug": "why-here"})["snapshot_id"]
+    out = steps(sample, owner)
+    step = next(s for s in out if s["key"] == "export:answer:why-here")
+    assert step["commands"][0]["argv"] == ["regenerate", sid, "--format", "txt"]
+    assert not any(s["key"].startswith("approve:answer") for s in out)
+    resume = invoke(sample.app, owner, "render", {"job_key": JOB, "export": None})["snapshot_id"]
+    applied = next(s for s in steps(sample, owner) if s["key"] == "applied")["commands"][0]["argv"]
+    assert resume in applied and sid in applied
+    for c in all_commands(steps(sample, owner)):
+        parses(c)

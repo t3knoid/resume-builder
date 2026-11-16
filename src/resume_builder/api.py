@@ -363,8 +363,10 @@ def _website(api: FastAPI, app: App) -> None:
         job = job or (ids[0] if ids else None)
         resumes = run(user, "snapshot_list", {"job_key": job, "doc_type": "resume"}) if job else []
         resumes = [r for r in resumes if not r["preview"]]
+        letter = next((d["approved_snapshot"] for d in (run(user, "document_list", {"job_id": job}) if job else [])
+                       if d["kind"] == "cover_letter" and d["status"] == "approved"), None)
         groups = [{"title": g["title"], "commands": shown(g["commands"], user)}
-                  for g in rbcmd.catalog(job, resumes[-1]["id"] if resumes else None)]
+                  for g in rbcmd.catalog(job, resumes[-1]["id"] if resumes else None, letter)]
         return page(request, "commands.html", user=user, jobs=jobs, job=job, groups=groups,
                     steps=next_steps(user, job) if job else [], user_flag=user_flag(user))
 
