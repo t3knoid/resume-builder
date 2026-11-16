@@ -127,25 +127,16 @@ class DenyAllPolicy:
         return False
 
 
-_policy: Policy = RolePolicy()
-
-
-def set_policy(policy: Policy) -> None:
-    global _policy
-    _policy = policy
-
-
-def get_policy() -> Policy:
-    return _policy
-
-
 def authorize(ctx: RequestContext, permission: str, target_user: str | None = None, *,
               known: AbstractSet[str] = PERMISSIONS, roles: RoleTable | None = None,
               tenant_id: str = LOCAL_TENANT, policy: Policy | None = None) -> None:
-    """The one permission check (B3). `known` and `roles` come from the App's registry."""
+    """The one permission check (B3). `known`, `roles` and `policy` come from the App.
+
+    Without a `policy`, a fresh `RolePolicy` checks `roles`: there is no process-wide policy.
+    """
     if permission not in known:
         raise PermissionDenied(f"Unknown permission `{permission}`.")
-    if not (policy or _policy).allows(ctx, permission, target_user or ctx.user_id, tenant_id=tenant_id, roles=roles):
+    if not (policy if policy is not None else RolePolicy()).allows(ctx, permission, target_user or ctx.user_id, tenant_id=tenant_id, roles=roles):
         raise PermissionDenied(
             f"`{ctx.actor}` is not allowed to do this (needs `{permission}`)."
             + (" The AI agent can only propose drafts; the owner confirms." if ctx.actor == "agent" else "")

@@ -20,7 +20,7 @@ from .models import UserSettings
 from .filestore import FileStore, local_file_store
 from .secretstore import EnvSecretStore, SecretStore
 from .storage import Storage, sqlite_storage
-from .security import LOCAL_TENANT, Policy, RequestContext
+from .security import LOCAL_TENANT, Policy, RequestContext, RolePolicy
 from .slug import is_slug
 
 
@@ -175,7 +175,6 @@ class App:
 
         self.settings = settings or load_settings()
         self.tenant_id = tenant_id
-        self.policy = policy  # None: the process-wide policy (security.set_policy)
         self.storage_factory = storage_factory or sqlite_storage  # (app, user_id) -> Storage
         self.file_store_factory = file_store_factory or local_file_store  # (app, user_id, area) -> FileStore
         self.secrets: SecretStore = secrets or EnvSecretStore()
@@ -191,6 +190,9 @@ class App:
             change_listeners = [write_back]
         self.change_listeners: list = list(change_listeners)
         self.registry = (registry or core_registry()).copy()
+        # Each App has its own policy. The default reads this App's role table, which is the live
+        # registry dict, so plugin grants added later (app.use) apply too.
+        self.policy: Policy = policy if policy is not None else RolePolicy(self.registry.role_permissions)
         self.extensions = Extensions(self.registry)
         self._spaces: dict[str, UserSpace] = {}
         self._lock = threading.Lock()

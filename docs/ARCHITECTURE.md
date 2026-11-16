@@ -112,7 +112,7 @@ api = create_app(
 | `change_listeners` | Callables `(space, Change) -> bool` | `[sync_ops.write_back]` |
 | `web_hosts` | Host names the website and API answer to. Every request with another `Host` is refused before any route runs (against DNS rebinding, PRD R8.9). Given a list, only those names work | `localhost`, `127.0.0.1`, `::1`, plus `RB_WEB_HOSTS` |
 | `fetcher` | A `fetch.PostingFetcher`: `fetch(url, limits) -> FetchedPage`, for job intake (PRD 8.13) and importing a resume from a link (R2.11). A replacement must keep R13.5–R13.8: one GET, no cookies or user data, internal addresses refused on every redirect, timeout and size limit | `fetch.HttpPostingFetcher` |
-| `policy` | A `Policy` | the process-wide `RolePolicy` |
+| `policy` | A `Policy`, used only by this App: two Apps in one process never share one. Tests change it with `app.policy = ...` | a `RolePolicy` built from this App's registry role table |
 | `tenant_id` | The tenant of the user spaces this App serves | `"local"` |
 
 ## The extension points
@@ -172,7 +172,7 @@ Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `a
 
 The agent status uses the channel to tell an assistant that reached the app itself (`mcp`, `mcp-http`, `api`) from drafts pasted through the CLI. A host adding an interface should give it its own channel name.
 
-`authorize()` is the only permission check. It asks the policy, passing the App's role table, so plugin grants apply. `RolePolicy` allows a permission only when one of the context's roles holds it, and only in the context's own user space and tenant. A host can pass its own `Policy` to the App.
+`authorize()` is the only permission check. It asks the policy, passing the App's role table, so plugin grants apply. `RolePolicy` allows a permission only when one of the context's roles holds it, and only in the context's own user space and tenant. Each App has its own policy (`app.policy`); there is no process-wide policy. The default is a `RolePolicy` over this App's own role table, so plugin grants added later with `app.use()` apply. A host can pass its own `Policy` to the App.
 
 ### 3. Storage (`storage.py`)
 

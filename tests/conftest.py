@@ -9,7 +9,7 @@ import pytest
 
 from resume_builder import services, sync_ops  # noqa: F401
 from resume_builder.config import load_settings
-from resume_builder.security import RequestContext, RolePolicy, set_policy
+from resume_builder.security import RequestContext
 from resume_builder.space import App
 
 REPO = Path(__file__).resolve().parent.parent
@@ -29,7 +29,6 @@ def roots(tmp_path, monkeypatch):
     monkeypatch.setenv("RB_BACKUP_ROOT", str(tmp_path / "backups"))
     monkeypatch.setenv("RB_CONTACT_EMAIL", "alex@example.com")
     monkeypatch.delenv("RB_DEFAULT_USER", raising=False)
-    set_policy(RolePolicy())
     return tmp_path
 
 
@@ -38,7 +37,6 @@ def app(roots):
     a = App(load_settings())
     yield a
     a.close()
-    set_policy(RolePolicy())
 
 
 @pytest.fixture
