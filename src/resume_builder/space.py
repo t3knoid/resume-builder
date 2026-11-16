@@ -43,6 +43,7 @@ class UserSpace:
         self.output: FileStore = app.file_store_factory(app, user, "output")
         self.backups: FileStore = app.file_store_factory(app, user, "backups")
         self._lock = threading.RLock()
+        self.destroyed = False  # set by `space_delete` once the user's data is gone
 
     # ------------------------------------------------------------ lifecycle
     def migrate(self) -> list[int]:

@@ -62,6 +62,20 @@ class SqliteStorage:
     def close(self) -> None:
         self.conn.close()
 
+    def destroy(self) -> None:
+        """Close and delete this user's database file, with its WAL and shared-memory files."""
+        row = self.conn.execute("PRAGMA database_list").fetchone()
+        path = Path(row["file"]) if row and row["file"] else None
+        self.conn.close()
+        if path is None:          # an in-memory database: closing it is deleting it
+            return
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            Path(str(path) + suffix).unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()   # the user's folder under RB_DB_ROOT, once it's empty
+        except OSError:
+            pass
+
     # ------------------------------------------------------------ meta
     def meta_get(self, key: str) -> str | None:
         row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()

@@ -64,6 +64,49 @@ def space_init(space: UserSpace, ctx: RequestContext, data: InitUserIn) -> dict:
     return {"user": space.user, "created": created, "sync": report.to_dict()}
 
 
+class DeleteUserIn(BaseModel):
+    confirm: str = Field(description="The user's name again, exactly: nothing is deleted without it")
+    delete_backups: bool = Field(False, description="Also delete the user's backups. Default: keep them, plus a final one")
+
+
+@operation("space_delete", "space:delete", DeleteUserIn,
+           "Delete a user: their data folder, database and exports, and optionally their backups. Can't be undone.", writes=True)
+def space_delete(space: UserSpace, ctx: RequestContext, data: DeleteUserIn) -> dict:
+    """The one way to delete a user (`rb delete-user`). Backs up first unless the backups go too.
+
+    Refuses the default user (bootstrap would recreate them empty at the next start) and any name
+    that isn't typed back exactly. The user's files go through this adapter, exports and backups
+    through their FileStores, the database through Storage.
+    """
+    user = space.user
+    if data.confirm != user:
+        raise ValidationFailed(f"Type the user's name, `{user}`, to confirm. Nothing was deleted.")
+    if user == space.app.settings.default_user:
+        raise ValidationFailed(
+            f"`{user}` is your default user (RB_DEFAULT_USER), so the app would create it again, empty, at the next start. "
+            "Set RB_DEFAULT_USER in .env to another user and restart the app first. Nothing was deleted.")
+    import shutil
+
+    from .filestore import delete_all
+
+    if not hasattr(space.repo, "destroy"):
+        raise ValidationFailed("This storage backend can't delete a user. Nothing was deleted.")
+    space.audit(ctx, "space:delete", target=user, result="ok")   # kept in the final backup
+    final_backup = None if data.delete_backups else space.backup("before-delete")
+    exports = delete_all(space.output)
+    backups = delete_all(space.backups) if data.delete_backups else 0
+    if space.data_dir.exists():
+        shutil.rmtree(space.data_dir)
+    space.lock_path.unlink(missing_ok=True)
+    with space.app._lock:
+        space.app._spaces.pop(user, None)
+    space.repo.destroy()
+    space.destroyed = True
+    return {"deleted": user, "exports_deleted": exports, "backups_deleted": backups,
+            "backups_kept": None if data.delete_backups else space.backups.location(),
+            "final_backup": final_backup}
+
+
 def repair(space: UserSpace, ctx: RequestContext, values: dict | None = None) -> list[str]:
     """Create missing folders and files. Never overwrite (R10.5, R10.6).
 

@@ -19,7 +19,7 @@ from .operations import invoke
 from .security import RequestContext
 from .space import App, build_app
 
-NO_PRESYNC = {"serve", "bootstrap", "doctor", "init-user", "sync", "resolve", "token", "restore", "backups", "call", "ops",
+NO_PRESYNC = {"serve", "bootstrap", "doctor", "init-user", "delete-user", "sync", "resolve", "token", "restore", "backups", "call", "ops",
               "mcp", "agent-instructions"}
 
 
@@ -42,6 +42,38 @@ def _print_steps(steps: list[dict], user: str | None) -> None:
             for line in lines(Command.from_dict(c), user):
                 print(f"   {line['label'] + ': ' if line['label'] else ''}{line['text']}" + (f"   # {c['note']}" if c["note"] else ""))
         print()
+
+
+def _delete_user(app: App, args) -> int:
+    name = args.name
+    users, _ = app.discover_users()
+    db = app.settings.user_db(name)
+    if name not in users and not db.exists():
+        raise AppError(f"No user `{name}`. Users: {', '.join(users) or 'none'}.")
+    s = app.settings
+    print(f"This permanently deletes user `{name}`:")
+    print(f"  - their data folder: {s.user_data(name)}")
+    print(f"  - their database: {db}")
+    print(f"  - their exported files: {s.user_output(name)}")
+    if args.delete_backups:
+        print(f"  - their backups: {s.user_backups(name)}  (there's no way back after this)")
+    else:
+        print(f"Their backups stay in {s.user_backups(name)}, with a final backup made now, so you can restore the database later.")
+    confirm = args.confirm
+    if confirm is None:
+        if not sys.stdin.isatty():
+            raise AppError(f"Nothing was deleted. Run it in a terminal to be asked, or add --confirm {name}.")
+        confirm = input(f"Type {name} to delete it (anything else cancels): ").strip()
+    if confirm != name:
+        print("Cancelled. Nothing was deleted.")
+        return 1
+    out = invoke(app, RequestContext.owner(name, channel="cli", tenant_id=app.tenant_id), "space_delete",
+                 {"confirm": confirm, "delete_backups": args.delete_backups})
+    print(f"Deleted `{name}`.")
+    if out["final_backup"]:
+        print(f"Final backup: {out['final_backup']}")
+    print("If the app is running, restart it so it forgets this user: docker compose restart")
+    return 0
 
 
 def _ctx(app: App, user: str) -> RequestContext:
@@ -297,6 +329,10 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("name")
     i.add_argument("--display-name")
     i.add_argument("--timezone", default="UTC")
+    du = cmd("delete-user", "Delete a user: their data folder, database and exports. Backs up first; asks you to type the name.")
+    du.add_argument("name")
+    du.add_argument("--delete-backups", action="store_true", help="also delete their backups (default: keep them, plus a final one)")
+    du.add_argument("--confirm", metavar="NAME", help="the user's name again, to confirm without being asked")
 
     s = cmd("sync", "Validate changed files and apply them to the database.")
     s.add_argument("--check", action="store_true", help="validate only")
@@ -499,6 +535,9 @@ def _run(app: App, args) -> int | None:
         ctx = RequestContext.owner(args.name)
         _print(invoke(app, ctx, "space_init", {"display_name": args.display_name, "timezone": args.timezone}))
         return 0
+
+    if args.cmd == "delete-user":
+        return _delete_user(app, args)
 
     if args.cmd == "agent-instructions":
         from .services.profiles import agent_instructions

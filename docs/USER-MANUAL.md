@@ -739,6 +739,27 @@ Nothing is lost: if you restored the wrong zip, the two pre-restore copies hold 
 | `--include-env` | Also restore `.env`; the current one is kept as `.env.pre-restore-<date-time>`. |
 | `--yes` | Don't ask (for scripts). Without it, the script refuses to run when it can't ask. |
 
+### Deleting a user
+
+`rb delete-user <name>` deletes one user for good: their folder under `data/`, their database and their exported files in `output/`. It lists what it will delete and asks you to type the name back; anything else cancels. Their backups stay in `backups/<name>/`, plus a final backup made just before, so you can still bring them back.
+
+```sh
+rb delete-user <name>                      # asks you to type the name
+rb delete-user <name> --confirm <name>     # the same, without asking (for scripts)
+rb delete-user <name> --delete-backups     # also delete their backups: there's no way back after this
+```
+
+It won't delete your default user (`RB_DEFAULT_USER` in `.env`), because the app would create that user again, empty, the next time it starts: set `RB_DEFAULT_USER` to another user and restart first. If the app is running, restart it afterwards (`docker compose restart`) so the website stops listing the user. Only you can delete a user: your AI agent can't, and the website has no way to do it.
+
+To bring a deleted user back from the final backup (its name starts with `app-before-delete-`):
+
+```sh
+rb --user <name> restore app-before-delete-<date>.db   # the database, from backups/<name>/
+rb --user <name> export-files                          # their files in data/<name>/, recreated from it
+```
+
+Exported PDFs aren't backed up; rebuild any you need with `rb regenerate <snapshot-id>`.
+
 ## 15. Working with an AI agent
 
 The app has no built-in AI and needs no paid AI plan: copy and paste works with any free chat assistant, and some assistants that connect directly have free plans too (see [AI-AGENTS.md](AI-AGENTS.md#do-i-need-a-paid-ai-plan)). You use your own assistant, and it works as the **agent**: it can read your confirmed content and propose drafts, but it can't confirm content, approve letters, record events or create jobs (only propose them), publish, or change companies. Every draft passes the honesty checks.
@@ -792,6 +813,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb resolve <file> --keep file\|app`                                                | Settle a sync conflict                              |
 | `rb doctor`                                                                        | Check everything; change nothing                    |
 | `rb init-user <name>`                                                              | Create another user folder                          |
+| `rb delete-user <name> [--delete-backups] [--confirm <name>]`                    | Delete a user (backs up first; asks for the name)   |
 | `rb export-files`                                                                  | Recreate missing files from the database            |
 | `rb new-job <url> [--company --department --title --create --set F=V --yes]`       | Start a job from its posting link, reviewed once    |
 | `rb new-job --file intake/<name>.txt [<url>]`                                      | The same, from posting text saved in `intake/`      |

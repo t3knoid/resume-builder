@@ -144,7 +144,7 @@ def invoke(app, ctx: RequestContext, name: str, payload: dict | BaseModel | None
         if op.writes:
             space.audit(ctx, name, target=_target(data), result=f"failed: {type(exc).__name__}")
         raise
-    if op.writes:
+    if op.writes and not getattr(space, "destroyed", False):  # a deleted space audited itself first
         space.audit(ctx, name, target=_target(data), result="ok")
     return result
 

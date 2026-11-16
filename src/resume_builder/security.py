@@ -22,7 +22,7 @@ PERMISSIONS = frozenset({
     "organization:read", "organization:write", "organization:merge",
     "application:read", "application:propose", "application:write", "event:append", "event:propose",
     "site:publish",
-    "space:init", "space:check", "space:sync",
+    "space:init", "space:check", "space:sync", "space:delete",
     "data:backup", "data:restore",
     "token:issue",
     "report:read",

@@ -153,13 +153,13 @@ Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `a
 
 ### 3. Storage (`storage.py`)
 
-`Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, captured job postings, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()` and `load()`. Rows come back as plain dicts.
+`Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, captured job postings, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
 
 `repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, and every record carries `created_by/at` and `updated_by/at`.
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 
-The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `sync`, `resolve`, `export_files`, `profile_propose_text`) and the bootstrap.
+The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`) and the bootstrap.
 
 Services never write those files. After a write they call `space.changed(kind, key)`, and every change listener on the App receives a `Change`. Locally that listener is `sync_ops.write_back`, which updates the working copy and keeps comments. A host without user files passes `change_listeners=[]`, or its own listeners.
 

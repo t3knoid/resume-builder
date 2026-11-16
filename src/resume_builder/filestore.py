@@ -87,6 +87,20 @@ class LocalFileStore:
         return str(self._path(key)) if key else str(self.root)
 
 
+def delete_all(store: FileStore) -> int:
+    """Delete every file in a store (`rb delete-user`). Returns how many were deleted."""
+    keys = store.list("")
+    for key in keys:
+        store.delete(key)
+    root = getattr(store, "root", None)
+    if isinstance(root, Path):
+        try:
+            root.rmdir()          # the user's own folder, once it's empty
+        except OSError:
+            pass
+    return len(keys)
+
+
 FileStoreFactory = Callable[["object", str, str], FileStore]  # (app, user_id, area) -> FileStore
 
 
