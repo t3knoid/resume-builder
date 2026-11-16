@@ -95,6 +95,8 @@ def catalog(job: str | None = None, snapshot: str | None = None, letter: str | N
             cmd("propose", j, "fit_report", clipboard=True, note="The fit report block."),
             cmd("propose", j, "cover_letter", clipboard=True, note="The cover letter block."),
             cmd("propose", j, "answer", "--slug", "why-here", clipboard=True, note='The "Why do you want this role?" answer.'),
+            cmd("propose", j, "answer", "--slug", "hiring-team", "--question", "Message to the hiring team", clipboard=True,
+                note="A short message to the hiring team instead of a full cover letter."),
             cmd("agent-instructions", note="Standing instructions to paste into the assistant's custom instructions once."),
             cmd("token", "--actor", "agent", note="An agent token, for an assistant connected by URL or the HTTP API."),
         ]},
@@ -113,6 +115,9 @@ def catalog(job: str | None = None, snapshot: str | None = None, letter: str | N
             cmd("approve", j, "answer", "--slug", "why-here", note="Approve the answer."),
             cmd("render", j, "--type", "answer", "--slug", "why-here", "--format", "txt",
                 note="The answer as plain text, to paste into an application form."),
+            cmd("approve", j, "answer", "--slug", "hiring-team", note="Approve the message to the hiring team."),
+            cmd("render", j, "--type", "answer", "--slug", "hiring-team", "--format", "txt",
+                note="The message as plain text, to paste into the application form."),
         ]},
         {"title": "Track the application", "commands": [
             cmd("event", j, "--stage", "applied", "--documents", s, note="You applied: record it with the versions you sent."),

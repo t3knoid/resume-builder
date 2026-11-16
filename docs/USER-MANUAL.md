@@ -584,6 +584,20 @@ rb approve <job-id> answer --slug other    # answers/other.md
 
 Approving saves a snapshot and gives you its id. Editing an approved document makes it a draft again.
 
+### A short message instead of a cover letter
+
+Some application forms ask for a "message to the hiring team" or a few lines in place of a cover letter. Save it as an answer with its own name and question. It follows the answer rules: plain prose, up to `answer_max_words` (100 by default), every claim cited, and motivation only from your `interest_notes`. With a connected assistant, ask it to draft "a short message to the hiring team for job `<job-id>`, as an answer with slug `hiring-team` and question 'Message to the hiring team'". With copy and paste, copy what the chat assistant writes and run:
+
+```sh
+pbpaste | rb propose <job-id> answer --slug hiring-team --question "Message to the hiring team"         # macOS
+```
+
+```powershell
+Get-Clipboard | rb propose <job-id> answer --slug hiring-team --question "Message to the hiring team"   # Windows PowerShell
+```
+
+Edit `answers/hiring-team.md` if you like, approve it with `rb approve <job-id> answer --slug hiring-team`, and get it as plain text to paste into the form with `rb render <job-id> --type answer --slug hiring-team --format txt`. These commands are on the website's Commands page, filled in. Each answer exports to its own file, named after its slug (for example `..._Answer_hiring-team_<job-id>.txt`).
+
 ## 10. Rendering, snapshots and exact copies
 
 ```sh

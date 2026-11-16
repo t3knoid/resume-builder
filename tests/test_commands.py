@@ -195,3 +195,18 @@ def test_an_approved_document_gets_an_export_step(sample, owner):
     assert resume in applied and sid in applied
     for c in all_commands(steps(sample, owner)):
         parses(c)
+
+
+def test_each_answer_exports_to_its_own_file(sample, owner):
+    """A job's answers used to share one export name, so exporting one overwrote another."""
+    text = "I cut release time from 3 hours to 25 minutes by moving 14 services to GitHub Actions. [cite: fab-ci-pipeline]"
+    invoke(sample.app, owner, "document_propose", {"job_id": JOB, "kind": "answer", "slug": "hiring-team",
+                                                   "question": "Message to the hiring team", "text": text})
+    names = set()
+    for slug in ("why-here", "hiring-team"):
+        sid = invoke(sample.app, owner, "document_approve", {"job_id": JOB, "kind": "answer", "slug": slug})["snapshot_id"]
+        out = invoke(sample.app, owner, "regenerate", {"snapshot_id": sid, "format": "txt"})
+        names.add(out["file"].replace("\\", "/").split("/")[-1])
+    assert len(names) == 2 and any("Answer_hiring-team" in n for n in names), names
+    argvs = [list(c.argv) for g in catalog(JOB) for c in g["commands"]]
+    assert ["approve", JOB, "answer", "--slug", "hiring-team"] in argvs

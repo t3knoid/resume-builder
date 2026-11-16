@@ -281,6 +281,8 @@ def build_content(space: UserSpace, job_key: str, doc_type: str, slug: str = "",
             "date": datetime.now(timezone.utc).date().isoformat(),
             "recipient": {"company": comp.name if comp else app.company, "title": app.title},
         }
+        if doc_type == "answer":
+            content["document"]["slug"] = slug  # tells a job's answers apart, e.g. in export file names
         content["sources"] = {"bullet_ids": cited, "document_hash": _hash(row["text"])}
     return content, bullet_ids
 
@@ -364,6 +366,9 @@ def file_name(space: UserSpace, content: dict, ext: str) -> str:
     name = "".join(ch for ch in content["person"]["name"].title() if ch.isalnum() or ch == " ").replace(" ", "_") or "Resume"
     kind = {"resume": "Resume", "public_site": "Resume", "cover_letter": "Cover_Letter", "answer": "Answer",
             "fit_report": "Fit_Report"}[content["doc_type"]]
+    slug = (content.get("document") or {}).get("slug") if content["doc_type"] == "answer" else None
+    if slug:  # one file per answer; snapshots saved before slugs were recorded keep the old name
+        kind += "_" + "".join(ch for ch in slug if ch.isalnum() or ch == "-")
     suffix = "" if content["job_key"] == "public" else f"_{content['job_key']}"
     variant = "_ATS" if content.get("variant") == "ats" else ""
     preview = "_PREVIEW" if content.get("preview") else ""
