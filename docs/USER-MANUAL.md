@@ -6,25 +6,56 @@ New here? Start with the [quick start](QUICKSTART.md). Connecting an AI assistan
 
 ## Contents
 
-1. [How it works](#1-how-it-works)
-2. [Installing and running](#2-installing-and-running)
-3. [Your folder](#3-your-folder)
-4. [How your edits reach the app (sync)](#4-how-your-edits-reach-the-app-sync)
-5. [Your content library: base.yaml](#5-your-content-library-baseyaml)
-6. [Companies and departments](#6-companies-and-departments)
-7. [Tracking a job](#7-tracking-a-job)
-8. [Tailoring a resume](#8-tailoring-a-resume)
-9. [Cover letters and application answers](#9-cover-letters-and-application-answers)
-10. [Rendering, snapshots and exact copies](#10-rendering-snapshots-and-exact-copies)
-11. [Recording what you sent](#11-recording-what-you-sent)
-12. [The tracker website](#12-the-tracker-website)
-13. [Your public resume](#13-your-public-resume)
-14. [Backups and restoring](#14-backups-and-restoring)
-15. [Working with an AI agent](#15-working-with-an-ai-agent)
-16. [Command reference](#16-command-reference)
-17. [Privacy and security](#17-privacy-and-security)
-18. [Troubleshooting](#18-troubleshooting)
-19. [What isn&#39;t built yet](#19-what-isnt-built-yet)
+- [Contents](#contents)
+- [1. How it works](#1-how-it-works)
+- [2. Installing and running](#2-installing-and-running)
+  - [Requirements](#requirements)
+  - [Settings (.env)](#settings-env)
+  - [Start, stop, update](#start-stop-update)
+  - [The `rb` command](#the-rb-command)
+  - [What happens at startup](#what-happens-at-startup)
+- [3. Your folder](#3-your-folder)
+- [4. How your edits reach the app (sync)](#4-how-your-edits-reach-the-app-sync)
+  - [When it happens](#when-it-happens)
+  - [What's checked](#whats-checked)
+  - [When something's wrong](#when-somethings-wrong)
+  - [Conflicts](#conflicts)
+  - [Removing things](#removing-things)
+  - [Backups before changes](#backups-before-changes)
+- [5. Your content library: base.yaml](#5-your-content-library-baseyaml)
+  - [Summary phrases](#summary-phrases)
+  - [Roles](#roles)
+  - [Projects](#projects)
+  - [Bullets](#bullets)
+  - [Education](#education)
+  - [Certifications](#certifications)
+  - [Skills](#skills)
+  - [Editor help](#editor-help)
+  - [Writing and confirming](#writing-and-confirming)
+- [6. Companies and departments](#6-companies-and-departments)
+- [7. Tracking a job](#7-tracking-a-job)
+  - [Starting](#starting)
+  - [application.yaml](#applicationyaml)
+  - [Events](#events)
+  - [Stages](#stages)
+- [8. Tailoring a resume](#8-tailoring-a-resume)
+- [9. Cover letters and application answers](#9-cover-letters-and-application-answers)
+  - [A short message instead of a cover letter](#a-short-message-instead-of-a-cover-letter)
+- [10. Rendering, snapshots and exact copies](#10-rendering-snapshots-and-exact-copies)
+- [11. Recording what you sent](#11-recording-what-you-sent)
+- [12. The tracker website](#12-the-tracker-website)
+  - [The Commands page](#the-commands-page)
+- [13. Your public resume](#13-your-public-resume)
+- [14. Backups and restoring](#14-backups-and-restoring)
+  - [Backing up everything at once](#backing-up-everything-at-once)
+  - [Restoring a backup zip](#restoring-a-backup-zip)
+  - [Deleting a user](#deleting-a-user)
+- [15. Working with an AI agent](#15-working-with-an-ai-agent)
+  - [Answering the agent's questions](#answering-the-agents-questions)
+- [16. Command reference](#16-command-reference)
+- [17. Privacy and security](#17-privacy-and-security)
+- [18. Troubleshooting](#18-troubleshooting)
+- [19. What isn't built yet](#19-what-isnt-built-yet)
 
 ---
 
@@ -197,7 +228,11 @@ rb resolve jobs/<job-id>/application.yaml --keep app    # rewrite the file from 
 
 ### Removing things
 
-Deleting an entry from `base.yaml` or `organizations.yaml` **archives** it: it can't be used in new documents, but documents that used it are unaffected. Deleting a job folder deletes nothing; `rb export-files` recreates it, and `rb archive-job <job-id>` archives the application.
+Deleting an entry from `base.yaml` or `organizations.yaml` **archives** it: it can't be used in new documents, but documents that used it are unaffected. There is no archive command or field: deleting is how you archive.
+
+To archive a role or project, delete its whole entry, bullets included; its bullets are archived with it. Also delete its id from every profile that lists it (`profiles/public.yaml` and each `jobs/<job-id>/profile.yaml`), or those files fail to sync with "It was removed from base.yaml (archived)"; `rb status` and `SYNC-STATUS.md` list any that fail. To bring an archived entry back, paste it into `base.yaml` again with the same id; the next sync restores it.
+
+Deleting a job folder deletes nothing; `rb export-files` recreates it, and `rb archive-job <job-id>` archives the application.
 
 If you delete `base.yaml` (or another main file) by accident, the next start rewrites it from the database.
 
@@ -224,7 +259,7 @@ The file also starts with `schema_version: 1`. Leave it as it is.
 
 **Rules for every section:**
 
-- **ids** are lowercase letters, digits and hyphens (`tcdi-ansible-patching`), unique across the whole file. Never reuse one, even after deleting the item: deleted items are archived, not erased.
+- **ids** are lowercase letters, digits and hyphens (`fab-ci-pipeline`), unique across the whole file. Never reuse one, even after deleting the item: deleted items are archived, not erased.
 - **Dates** are `YYYY-MM` (`2022-07`) or `YYYY` (`2022`). An end date can also be `present`. An end date before its start date is an error.
 - **Unknown keys are errors**, so a typo like `titel:` is caught instead of silently ignored.
 - **Text length** is limited to 300 characters for short fields (titles, names, locations) and 5,000 for long ones (bullet text, descriptions).
