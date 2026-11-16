@@ -61,10 +61,10 @@ The first real user is onboarded through the same path as any other user (`init-
 - Job intake (section 8.13): start a job from its posting URL, or from pasted text as a fallback, with fields extracted and the posting captured, confirmed once by the user.
 - Validator, renderer, ATS-friendly HTML and PDF output (WeasyPrint).
 - Cover letter and "Why do you want to work here?" drafts built from the tailored resume (section 8.9).
-- Local tracker website: application list, history for each application, basic dashboard, sync status. Read-only unless the owner signs in, which adds Confirm and Discard for what the agent proposed (R8.8).
+- Local tracker website: application list, history for each application, basic dashboard, sync status, AI agent status (R8.10), online help (R8.11), copy-ready commands (R8.12) and ready-made prompts (R8.13). Read-only unless the owner signs in, which adds Confirm and Discard for what the agent proposed and an Edit details form for the owner's own fields on a job (R8.8).
 - Optional public resume site: render the public profile and export it as a static site. Pushing it to the publish target in `user.yaml` (for example a GitHub Pages repo) is milestone 6.
 - A user manual and a quick-start guide (`docs/USER-MANUAL.md`, `docs/QUICKSTART.md`), written around the example user.
-- **No built-in AI model.** The AI agent is an outside tool the user runs. It always acts as the `agent` actor (B7, DK13) through one of three channels, each going through the operation registry and the same checks:
+- **No built-in AI model.** The AI agent is an outside tool the user runs. It always acts as the `agent` actor (B7, DK13) through one of four channels, each going through the operation registry and the same checks:
   - **MCP server** (`rb mcp`, stdio): tools generated from the registry, filtered to the agent role's permissions. Works with MCP clients such as Claude Code, Claude Desktop, Gemini CLI, Codex CLI and GitHub Copilot in VS Code.
   - **MCP over HTTP** (`POST /mcp/<user>` on the tracker, D33): the same tools for assistants on the user's computer that connect with a URL. Needs the agent's token (B9a), answers plain JSON, refuses a foreign `Origin` as well as a foreign Host (R8.9). Local only: cloud connectors can't reach it.
   - **Copy and paste** for chat-only assistants: `rb brief` / `rb agent-instructions` produce the text to paste; `rb propose` submits each returned block as the agent.
@@ -175,6 +175,8 @@ resume-builder/
 | R3.1 | The user adds `posting.md`. The AI produces a profile (ids and order only) and a fit report through the API. Both are stored in the database and written back as `profile.yaml` and `fit-report.md` for review. |
 | R3.2 | The fit report lists strong matches, weak spots, gaps, questions for the user, and notes on the role. |
 | R3.3 | Each gap gets a decision from the user: a real gap, or missing information to add to the content library as a draft. |
+| R3.4 | **Condensing older roles:** a profile puts recent, relevant roles under `roles` and condenses older or less relevant ones under `earlier_roles` (role id → a few bullet ids, or none), instead of dropping them, so the work history has no unexplained gap. The resume shows them after the main roles as one "Earlier experience" entry: each role's own title, company and dates, plus any bullets chosen. Every role under `earlier_roles` is older than the roles under `roles`, and a role can't be in both. Bullets under `earlier_roles` are on the tailored resume, so letters and answers may cite them (R9.1). |
+| R3.5 | **Agent brief:** `agent_brief` (`rb brief`) gives the agent everything it may use for one job, and nothing else: the agent rules, the user's word limits and banned phrases, how to submit drafts, the job's company, title and `interest_notes`, the posting, and the confirmed content library: summary phrases, roles and projects with their dates and confirmed bullets (tags, metric, limits), skill groups, and every recorded detail of confirmed education (school, degree, field, dates) and certifications (name, issuer, date), so the agent never asks for, or guesses, what the library already holds. Draft items are named only as not usable yet. |
 
 ### 8.4 Content rules
 
@@ -185,7 +187,7 @@ These rules apply to every write, whether it arrives through YAML sync (section 
 | R4.1 | Every referenced id exists and is `confirmed`. |
 | R4.2 | Every keyword the profile claims maps to a tag in the content library. |
 | R4.3 | A profile contains no free text, except in `gaps`. |
-| R4.4 | Roles stay in chronological order. A role is left out only if it is listed in `omitted_roles` with a reason. |
+| R4.4 | Roles stay in chronological order, under `roles` and under `earlier_roles` (R3.4). A role is left out only if it is listed in `omitted_roles` with a reason. |
 | R4.5 | Each application matches its schema, its event dates run in order, and its status transitions are allowed (section 8.6). |
 
 ### 8.5 Rendering
@@ -310,7 +312,7 @@ For any job with a tailored profile, the user can ask for a cover letter, a shor
 
 | Id | Requirement |
 | --- | --- |
-| R9.1 | Evidence about the candidate comes only from the confirmed bullets and summary phrases selected in that job's profile. If a point isn't on the tailored resume, it isn't in the letter or answer. |
+| R9.1 | Evidence about the candidate comes only from the confirmed bullets and summary phrases selected in that job's profile: under `roles`, `projects` or `earlier_roles` (R3.4). If a point isn't on the tailored resume, it isn't in the letter or answer. |
 | R9.2 | Facts about the employer and role come only from the posting and the user's own notes in the application (`interest_notes`: why they want this job, what they know about the company). The AI does not add company facts from anywhere else. |
 | R9.3 | The candidate's motivation ("why I want this") comes only from `interest_notes`. If the notes are empty, the AI asks the user and does not make up enthusiasm. A draft can still be produced, with a marked placeholder where the motivation goes. |
 
@@ -320,7 +322,8 @@ For any job with a tailored profile, the user can ask for a cover letter, a shor
 | --- | --- |
 | R9.4 | Brief: 100 words or fewer by default (`answer_max_words` in `user.yaml`), plain prose, no headings or bullet points. |
 | R9.5 | Shape: one sentence on why this role and employer (from R9.2 and R9.3), then one or two sentences linking the posting's top requirements to the strongest evidence on the tailored resume, with a metric where one exists. |
-| R9.6 | Stored as an application answer with the question text, so other common questions ("Tell us about a project you're proud of", "Why are you a good fit?") can be added later with no change to the model. |
+| R9.6 | Stored as an application answer with the question text, so other common questions ("Tell us about a project you're proud of", "Why are you a good fit?") can be added later with no change to the model. Each answer has a slug (`why-here` by default). A short **message to the hiring team**, for forms that ask for one instead of a cover letter, is an answer with slug `hiring-team` and the question "Message to the hiring team"; the answer rules (R9.1–R9.4, R9.9–R9.14) apply to it as written. |
+| R9.6a | An answer exports as plain text or PDF, named `<Name>_Answer_<slug>_<job-id>.<txt\|pdf>`, so a job's answers never overwrite each other. The slug is recorded in the answer's snapshot; snapshots saved before slugs were recorded keep the old name, `<Name>_Answer_<job-id>`. |
 
 #### Cover letter
 
@@ -562,12 +565,14 @@ user confirms (or edits a field, or picks another company)  →  job created, po
 ### 9.1 Layers: one API in front of all data
 
 ```text
-Interfaces    CLI · tracker website · HTTP API · AI agent · bootstrap
+Interfaces    CLI · tracker website · HTTP API · MCP server (stdio, HTTP) · bootstrap
+              (the AI agent uses MCP, the HTTP API or the CLI as the `agent` actor)
                   │   call service operations only
 Service API   ContentService · ProfileService · LetterService · RenderService · ApplicationService
               ReportService · SnapshotService · SyncService
                   │   every call: request context → authorize → validate → act → audit
-Storage API   Repositories: Content · Organization · Profile · Application · Document · Snapshot · Audit · SyncState
+Storage API   Repositories: Content · Organization · Profile · Application · Event · Document · Snapshot · Audit · SyncState
+              PostingCapture · IntakeProposal · ApplicationDraft · EventDraft · Token · WebSession
                   │
 Backend       SQLite (source of truth)
 
@@ -657,13 +662,15 @@ The application ships and runs as a Docker image. The image contains only code, 
 | DK9 | All settings come from environment variables with documented defaults: data roots (R1.7), port, default user, log level, sync polling interval. |
 | DK10 | Contact details and publish credentials come from Docker secrets (`/run/secrets/...`) or environment variables, using the names in `user.yaml`. They are never stored in an image, a mount, the database or a log. |
 | DK11 | A `compose.yaml` in the code repo defines the service, the four mounts, the localhost-only port and the secrets. `docker compose up` is the standard way to run the app. |
+| DK11a | **One-step setup:** `setup.sh` (macOS, Linux, Git Bash) and `setup.ps1` / `setup.bat` (Windows) create `.env` from `.env.example` on the first run (with `PUID`/`PGID` filled in on macOS and Linux) and stop so the user can fill it in; run again, they build and start the app and install the `rb` command. Running them again, for example after an update, is safe. |
 
 ### 11.4 Interfaces from outside the container
 
 | Id | Requirement |
 | --- | --- |
 | DK12 | The CLI runs through the same container (`docker compose run --rm app <command>` or `docker compose exec app <command>`), so it goes through the same service API (A1). |
-| DK13 | The AI agent runs on the host and works only through the HTTP API on `127.0.0.1` or through the containerized CLI, as the `agent` actor (B7). It never edits the mounted files directly once the API exists (A8). |
+| DK12a | **The `rb` command:** `scripts/install-rb.sh` (macOS, Linux, Git Bash) and `scripts/install-rb.ps1` / `install-rb.cmd` (Windows) install a small `rb` wrapper on the user's `PATH` that runs `docker compose run --rm app rb <arguments>` for this folder's `compose.yaml` and `.env`, from any folder. It is only a shortcut for DK12: every command still runs in the container. `--uninstall` removes it. |
+| DK13 | The AI agent runs on the host, as the `agent` actor (B7), and reaches the app only through the channels in section 6.1: the MCP server over stdio (`rb mcp`, in the container), MCP over HTTP (`/mcp/<user>`) or the HTTP API on `127.0.0.1` with an agent token, or the containerized CLI (`rb brief`, `rb propose`). It never edits the mounted files directly once the API exists (A8). |
 
 ### 11.5 Code and data repos
 
@@ -673,7 +680,7 @@ The application ships and runs as a Docker image. The image contains only code, 
 
 ## 12. Decisions
 
-All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D36 (job intake, section 8.13, website sign-in, MCP over HTTP, copy-ready commands, deleting a user and ready-made prompts) were decided on November 15, 2026.
+All decisions were approved on November 13, 2026. D2 was revised the same day at the product owner's direction, and D1 uses the format the product owner specified. D15 and D16 were still marked open when the decisions were completed; they take the recommended choice and can be changed later through `user.yaml` (D15) or a small code change (D16). D23 (license) was decided on November 14, 2026. D24–D36 (job intake, section 8.13, website sign-in, MCP over HTTP, copy-ready commands, deleting a user and ready-made prompts) were decided on November 15, 2026, and D37 (your answers on a job) the same day.
 
 | #   | Decision                                                                     | Choice                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -706,14 +713,14 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 | D27 | May the agent trigger a fetch (R13.24)? |  Yes, through `job_intake_propose` with a URL, since the fetch is one GET under R13.5–R13.8 and creates nothing until the owner confirms |
 | D28 | New permission `application:propose` for the agent (R13.22) | Add it to B2 and the agent role in B7 |
 | D29 | Keep every capture of a posting, or only the latest (R13.10)? | Keep all; they are small text and show when a posting changed |
-| D37 | May the agent pass on the user's interest notes and other answers (issue #38)? | Yes, as the user's words for the user to check: `from_user` in a job proposal (R13.22a) and drafted changes on an existing job (R6.7). The agent never writes or guesses them; nothing is saved until the owner confirms. The owner can also change these fields through an operation (`application_update`, `rb set`, the website), not only in `application.yaml` |
-| D36 | Should the app suggest what to ask the AI assistant (issue #37)? | Yes: a fixed, built-in set covering what the agent may do, in both wordings, on the website, in MCP and in the CLI. Users can't change the wording yet; overrides in `user.yaml` can come later if needed (decided November 15, 2026) |
-| D35 | How is a user deleted? | `rb delete-user <name>`, owner only, after typing the name back; never the default user. It keeps the user's backups by default and adds a final one, so a deletion can be undone; `--delete-backups` removes those too. Not on the website or for the agent (decided November 15, 2026) |
-| D34 | Should the website show the commands to run, or run them (issue #36)? | Show them, filled in and ready to copy, with per-job next steps from a read operation. Running commands from the website would make it a second way to change data beside the signed-in actions of D32; copying keeps every change on the command line, where the user sees it (decided November 15, 2026) |
-| D33 | May assistants connect to the MCP tools with a URL (issue #35)? | Yes, for assistants on the user's computer: MCP's Streamable HTTP transport at `/mcp/<user>` on the tracker, with the agent's token, plain JSON answers, no event stream or sessions, and Origin and Host checks. The stdio command stays the default (it works without the tracker running). Never reachable from the internet (decided November 15, 2026) |
-| D32 | May the website confirm or discard what the agent proposed (R8.8, R8.9)? | Yes, after the owner signs in with an owner token or a one-time `rb web-login` link. Cookie session (`HttpOnly`, `SameSite=Strict`, signed, 12 hours idle, 7 days at most), synchronizer CSRF tokens, `Origin`/`Host` checks, no scripts; nothing else on the website writes (decided November 15, 2026) |
-| D31 | May site adapters read JSON APIs (R13.7, R13.16)? | Yes, only when an adapter asks for JSON. Captures may then be `application/json` (migration 0004). The wording check for JSON is per block: each Markdown block must match one JSON string value, words in order; blocks may come in any order (decided November 15, 2026) |
 | D30 | One command or two for starting a job (R13.1)? | One: `new-job`. Given a link, `--stdin` or `--file` it runs intake; without, it creates the job only. A separate `intake` command was confusing next to `new-job` (decided November 15, 2026) |
+| D31 | May site adapters read JSON APIs (R13.7, R13.16)? | Yes, only when an adapter asks for JSON. Captures may then be `application/json` (migration 0004). The wording check for JSON is per block: each Markdown block must match one JSON string value, words in order; blocks may come in any order (decided November 15, 2026) |
+| D32 | May the website confirm or discard what the agent proposed (R8.8, R8.9)? | Yes, after the owner signs in with an owner token or a one-time `rb web-login` link. Cookie session (`HttpOnly`, `SameSite=Strict`, signed, 12 hours idle, 7 days at most), synchronizer CSRF tokens, `Origin`/`Host` checks, no scripts; nothing else on the website writes (decided November 15, 2026) |
+| D33 | May assistants connect to the MCP tools with a URL (issue #35)? | Yes, for assistants on the user's computer: MCP's Streamable HTTP transport at `/mcp/<user>` on the tracker, with the agent's token, plain JSON answers, no event stream or sessions, and Origin and Host checks. The stdio command stays the default (it works without the tracker running). Never reachable from the internet (decided November 15, 2026) |
+| D34 | Should the website show the commands to run, or run them (issue #36)? | Show them, filled in and ready to copy, with per-job next steps from a read operation. Running commands from the website would make it a second way to change data beside the signed-in actions of D32; copying keeps every change on the command line, where the user sees it (decided November 15, 2026) |
+| D35 | How is a user deleted? | `rb delete-user <name>`, owner only, after typing the name back; never the default user. It keeps the user's backups by default and adds a final one, so a deletion can be undone; `--delete-backups` removes those too. Not on the website or for the agent (decided November 15, 2026) |
+| D36 | Should the app suggest what to ask the AI assistant (issue #37)? | Yes: a fixed, built-in set covering what the agent may do, in both wordings, on the website, in MCP and in the CLI. Users can't change the wording yet; overrides in `user.yaml` can come later if needed (decided November 15, 2026) |
+| D37 | May the agent pass on the user's interest notes and other answers (issue #38)? | Yes, as the user's words for the user to check: `from_user` in a job proposal (R13.22a) and drafted changes on an existing job (R6.7). The agent never writes or guesses them; nothing is saved until the owner confirms. The owner can also change these fields through an operation (`application_update`, `rb set`, the website), not only in `application.yaml` |
 
 ## 13. Milestones
 
@@ -725,3 +732,4 @@ All decisions were approved on November 13, 2026. D2 was revised the same day at
 6. Optional publishing of the exported public site to the target set in `user.yaml`.
 7. First real user onboarded with `init-user` and running a live application from start to finish. Anything they need that's missing becomes a generic feature (R1.6).
 8. Job intake (section 8.13, D24–D29): capture from a URL and from pasted text, structured-data and rule-based extraction with passage checks, registry matching, duplicate check, preview and confirm, agent proposals, and fetch-safety tests against a local stub.
+9. Working with the agent day to day (D30–D37): owner sign-in on the website with Confirm and Discard (R8.8, R8.9), the Host check on every request, AI agent status (R8.10), online help (R8.11), copy-ready commands (R8.12), ready-made prompts in MCP, the website and the CLI (R8.13), MCP over HTTP (D33), site adapters for JSON APIs (D31), `delete-user` (R10.9a), and the user's own answers on a job, passed on by the agent and editable through `rb set` and the website (R6.6, R6.7, R13.22a). One-step setup scripts and the `rb` command (DK11a, DK12a).

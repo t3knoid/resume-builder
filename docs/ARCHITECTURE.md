@@ -9,7 +9,7 @@ flowchart TD
     subgraph IF["Interfaces: build an App with build_app() or create_app()"]
         CLI["CLI<br/>rb"]
         WEB["HTTP API<br/>+ website"]
-        MCP["MCP server<br/>rb mcp"]
+        MCP["MCP server<br/>rb mcp, POST /mcp/{user}"]
         PR["Plugin<br/>routers"]
     end
     OPS["Operation registry: core + plugin operations<br/>invoke(): request context → policy → validate → run → audit"]
@@ -73,6 +73,8 @@ sequenceDiagram
 ```
 
 Interfaces only build the request context: actor, roles, user space and tenant. The policy and the audit log sit inside `invoke()`, so no interface can skip them.
+
+Only writes get an audit entry. For calls by the `agent` actor, reads included, `invoke()` also records when the agent was last seen on that channel (`services/agent_status.note_seen`, at most once a minute, in storage meta). The website's agent status uses it. This bookkeeping never fails the call.
 
 ## Building an App
 
@@ -140,22 +142,51 @@ From then on, the operation:
 
 - is `POST /api/{user}/note_add` in the HTTP API and listed in the OpenAPI spec;
 - is callable with `rb call note_add` and listed by `rb ops`;
-- is an MCP tool for every role holding its permission (`mcp.tools_for(registry, role)`); `rb mcp` serves the `agent` role;
+- is an MCP tool for every role holding its permission (`mcp.tools_for(registry, role)`); the MCP server serves the `agent` role;
 - runs only through `invoke()`, which checks the permission, validates the input and writes an audit entry for writes.
 
 An operation that names an undeclared permission is refused at registration.
+
+The MCP server (`mcp.McpServer`) has two transports with the same tools and the same handler:
+
+- **stdio:** `rb mcp`, channel `mcp`. The assistant starts it as a process.
+- **Streamable HTTP:** `POST /mcp/{user}` on the tracker (`api._mcp_http`), channel `mcp-http`. Every request needs an agent token (`Authorization: Bearer`, from `rb token --actor agent`); an owner token is refused. A foreign `Origin` is refused as well as a foreign `Host`, and bodies over a size limit are rejected. Answers are plain JSON: no event stream and no sessions, so `GET` and `DELETE` return 405. Like the rest of the site, it's reachable only on the host's `127.0.0.1`.
+
+The server also answers `prompts/list` and `prompts/get` with the ready-made requests in `prompts.py`, which clients offer as slash commands. Prompts are a fixed list in core, not part of the registry: a plugin can't add one, and a prompt only asks the agent to call operations, which still go through `invoke()`.
 
 ### 2. Request context and policy (`security.py`)
 
 Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `anonymous`), `roles`, `user_id` (the user space), `tenant_id`, `channel` and `request_id`. Locally the user id is the folder name under `RB_DATA_ROOT`, and the tenant is always `"local"`.
 
+`channel` says how the call arrived, and it's written to every audit entry:
+
+| Channel | Where from |
+| --- | --- |
+| `cli` | `rb` commands, including drafts an agent pipes into `rb propose` |
+| `api` | The HTTP API, `POST /api/{user}/<operation>` |
+| `web` | Website pages, and the owner's signed-in `POST` actions |
+| `mcp` | The MCP server over stdio (`rb mcp`) |
+| `mcp-http` | The MCP server over HTTP (`POST /mcp/{user}`) |
+| `yaml-sync` | Changes applied from the user's YAML and Markdown files |
+| `bootstrap` | Container start: migrations and the first sync |
+
+The agent status uses the channel to tell an assistant that reached the app itself (`mcp`, `mcp-http`, `api`) from drafts pasted through the CLI. A host adding an interface should give it its own channel name.
+
 `authorize()` is the only permission check. It asks the policy, passing the App's role table, so plugin grants apply. `RolePolicy` allows a permission only when one of the context's roles holds it, and only in the context's own user space and tenant. A host can pass its own `Policy` to the App.
 
 ### 3. Storage (`storage.py`)
 
-`Storage` is the interface services use through `space.repo`: content library, organizations, applications and events, captured job postings, profiles, documents, snapshots, audit log, sync state and tokens, plus `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
+`Storage` is the interface services use through `space.repo`. It covers:
 
-`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, and every record carries `created_by/at` and `updated_by/at`.
+- the content library, organizations, applications and events;
+- drafts waiting for the owner: event drafts, intake proposals (jobs an agent proposed) and application drafts (changes an agent proposed to a job's own fields);
+- captured job postings, profiles, documents and snapshots;
+- the audit log, sync state and tokens, plus the queries the agent status uses (`last_audit_at`, `audit_entries_by`, `active_token_created`, `replaced_token_actor`);
+- website sign-in: sessions and one-time login codes, stored only as hashes.
+
+It also has `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
+
+`repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, intake proposals and application drafts are kept and resolved once (pending to confirmed or discarded, never back, never deleted; `0003` and `0006` enforce this with triggers), sessions, login codes and tokens are stored only as hashes, a login code works once, and every record carries `created_by/at` and `updated_by/at`.
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 
