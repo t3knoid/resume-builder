@@ -7,7 +7,6 @@ import threading
 import time
 
 from . import sync as sync_mod
-from .security import RequestContext
 from .space import App
 
 log = logging.getLogger("resume_builder")
@@ -22,7 +21,7 @@ def watch(app: App, stop: threading.Event) -> None:
             try:
                 space = app.space(user)
                 with space._lock:
-                    report = sync_mod.run_sync(space, RequestContext.system(user))
+                    report = sync_mod.run_sync(space, app.context("system", user))
                     if time.time() - last_daily > 3600:
                         space.daily_backup_if_due()
                 for r in report.results:

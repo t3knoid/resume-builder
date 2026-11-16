@@ -20,7 +20,6 @@ from . import services, sync_ops  # noqa: F401  (registers operations)
 from . import sync as sync_mod
 from .errors import AppError
 from .operations import REGISTRY, Registry, invoke
-from .security import RequestContext
 from .services.profiles import agent_instructions
 from .space import App
 
@@ -122,8 +121,7 @@ class McpServer:
         info = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
         try:
             space = self.app.space(self.user)
-            ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel=self.channel,
-                                 tenant_id=self.app.tenant_id)
+            ctx = self.app.context(self.role, self.user, self.channel)
             with space._lock:
                 note_connect(space, ctx, clean_client(info.get("name"), info.get("version")))
         except Exception:
@@ -135,12 +133,11 @@ class McpServer:
         space = self.app.space(self.user)
         with space._lock:
             # Pick up the user's latest file edits before answering (R7.5).
-            sync_mod.run_sync(space, RequestContext.system(self.user, tenant_id=self.app.tenant_id))
+            sync_mod.run_sync(space, self.app.context("system", self.user))
             if name == "agent_brief":
                 arguments = {"mode": "mcp", **arguments}
             try:
-                ctx = RequestContext(actor=self.role, roles=(self.role,), user_id=self.user, channel=self.channel,
-                                     tenant_id=self.app.tenant_id)
+                ctx = self.app.context(self.role, self.user, self.channel)
                 out = invoke(self.app, ctx, name, arguments)
             except AppError as exc:
                 lines = [exc.message] + [f"- {p.render()}" for p in exc.problems]

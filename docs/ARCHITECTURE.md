@@ -158,6 +158,8 @@ The server also answers `prompts/list` and `prompts/get` with the ready-made req
 
 Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `anonymous`), `roles`, `user_id` (the user space), `tenant_id`, `channel` and `request_id`. Locally the user id is the folder name under `RB_DATA_ROOT`, and the tenant is always `"local"`.
 
+Interfaces and the sync adapter build contexts with `app.context(actor, user, channel=None, roles=None)`, which fills in the App's `tenant_id`: bootstrap, the sync watcher, `rb mcp`'s pre-sync, the CLI, the HTTP API and the website all use it. So an App serving another tenant runs its own system calls in that tenant instead of being refused. Roles default to the role named like the actor (`anonymous` gets `viewer`), and the channel to `bootstrap` for `system`, `web` for `anonymous` and `cli` otherwise. The `RequestContext.owner()`/`.system()`/`.agent()` shortcuts default to the local tenant; a host building its own contexts sets `tenant_id` itself.
+
 `channel` says how the call arrived, and it's written to every audit entry:
 
 | Channel | Where from |

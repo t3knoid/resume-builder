@@ -81,7 +81,7 @@ def note_replaced_token(space: UserSpace) -> None:
     space.repo.meta_set("agent.last_refused.api", now)
     if _ago(space.repo.meta_get("agent.last_refused_audit"), REFUSED_EVERY):
         space.repo.meta_set("agent.last_refused_audit", now)
-        space.audit(RequestContext.agent(space.user, channel="api", tenant_id=space.app.tenant_id),
+        space.audit(space.app.context("agent", space.user, "api"),
                     "api:token-replaced", result="refused")
 
 

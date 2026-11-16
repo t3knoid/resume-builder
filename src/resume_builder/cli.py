@@ -102,7 +102,7 @@ def _delete_user(app: App, args) -> int:
     if confirm != name:
         print("Cancelled. Nothing was deleted.")
         return 1
-    out = invoke(app, RequestContext.owner(name, channel="cli", tenant_id=app.tenant_id), "space_delete",
+    out = invoke(app, app.context("owner", name), "space_delete",
                  {"confirm": confirm, "delete_backups": args.delete_backups})
     print(f"Deleted `{name}`.")
     if out["final_backup"]:
@@ -118,8 +118,8 @@ def _ctx(app: App, user: str) -> RequestContext:
         actor = actor_for_token(app.space(user), token)
         if actor is None:
             raise AppError("RB_ACTOR_TOKEN isn't a valid token for this user.")
-        return RequestContext(actor=actor, roles=(actor,), user_id=user, channel="cli", tenant_id=app.tenant_id)
-    return RequestContext.owner(user)
+        return app.context(actor, user)
+    return app.context("owner", user)
 
 
 def _user(app: App, args) -> str:
@@ -620,7 +620,7 @@ def _run(app: App, args) -> int | None:
             print(f"{op.name:22} {op.permission:22} {'write' if op.writes else 'read '}  {op.summary}")
         return 0
     if args.cmd == "init-user":
-        ctx = RequestContext.owner(args.name)
+        ctx = app.context("owner", args.name)
         _print(invoke(app, ctx, "space_init", {"display_name": args.display_name, "timezone": args.timezone}))
         return 0
 
@@ -635,11 +635,11 @@ def _run(app: App, args) -> int | None:
     if args.cmd == "mcp":
         from .mcp import serve_stdio
         space = app.space(user)
-        sync_mod.run_sync(space, RequestContext.system(user))
+        sync_mod.run_sync(space, app.context("system", user))
         return serve_stdio(app, user)
     ctx = _ctx(app, user)
     if args.cmd not in NO_PRESYNC:
-        report = sync_mod.run_sync(app.space(user), RequestContext.system(user))  # quick: unchanged files are skipped
+        report = sync_mod.run_sync(app.space(user), app.context("system", user))  # quick: unchanged files are skipped
         if not report.ok:
             print("Note: some files have problems; see SYNC-STATUS.md (`rb status`).", file=sys.stderr)
 
@@ -773,7 +773,7 @@ def _run(app: App, args) -> int | None:
         if not text.strip():
             raise AppError("Nothing on stdin. Pipe the draft in, e.g. `pbpaste | rb propose <job-id> profile`.")
         # Pasted drafts are submitted as the agent's work, so they get the agent's strict checks (B7).
-        agent_ctx = RequestContext.agent(user, channel="cli")
+        agent_ctx = app.context("agent", user)
         if args.kind == "profile":
             result = invoke(app, agent_ctx, "profile_propose_text", {"key": args.job_id, "text": text})
         else:

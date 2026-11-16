@@ -215,6 +215,21 @@ class App:
         for d in reversed(list(document_template_dirs)):
             self.extensions.add_document_templates(d)
 
+    def context(self, actor: str, user: str, channel: str | None = None, *,
+                roles: tuple[str, ...] | list[str] | None = None) -> RequestContext:
+        """A request context for `actor` in `user`'s space, in this App's tenant (issue #7).
+
+        Interfaces and the sync adapter build every context with this, so an App serving another
+        tenant than `local` can still run its own bootstrap, sync and CLI calls. `roles` defaults
+        to the role named like the actor (`anonymous` gets `viewer`); `channel` defaults to
+        `bootstrap` for `system`, `web` for `anonymous` and `cli` for everyone else.
+        """
+        if roles is None:
+            roles = ("viewer",) if actor == "anonymous" else (actor,)
+        if channel is None:
+            channel = {"system": "bootstrap", "anonymous": "web"}.get(actor, "cli")
+        return RequestContext(actor=actor, roles=tuple(roles), user_id=user, channel=channel, tenant_id=self.tenant_id)
+
     def use(self, plugin, name: str | None = None) -> None:
         """Apply one more plugin to this App."""
         from .plugins import apply_plugin

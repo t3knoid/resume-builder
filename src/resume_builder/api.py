@@ -46,8 +46,8 @@ def context_for(app: App, user: str, authorization: str | None) -> RequestContex
             if space.repo.replaced_token_actor(hash_token(token)) == "agent":
                 note_replaced_token(space)  # shown on the agent status: "your assistant's token was replaced"
             raise PermissionDenied("That token isn't valid (it may have been replaced). Issue a new one with `rb token`.")
-        return RequestContext(actor=actor, roles=(actor,), user_id=user, channel="api", tenant_id=app.tenant_id)
-    return RequestContext.anonymous(user, tenant_id=app.tenant_id)
+        return app.context(actor, user, "api")
+    return app.context("anonymous", user)
 
 
 def _check_user(app: App, user: str) -> None:
@@ -225,7 +225,7 @@ def _website(api: FastAPI, app: App) -> None:
         return templates.TemplateResponse(request, name, {"version": __version__, **session, **kw}, status_code=status_code)
 
     def owner_ctx(user: str) -> RequestContext:
-        return RequestContext.owner(user, channel="web", tenant_id=app.tenant_id)
+        return app.context("owner", user, "web")
 
     def run_owner(user: str, op: str, payload: dict | None = None):
         space = app.space(user)
@@ -440,7 +440,7 @@ def _website(api: FastAPI, app: App) -> None:
                 else:
                     ok, how = bool(token) and actor_for_token(space, token) == "owner", "owner token"
                 if not ok:
-                    space.audit(RequestContext.anonymous(user, tenant_id=app.tenant_id), "web:sign-in", result=f"failed: {how}")
+                    space.audit(app.context("anonymous", user), "web:sign-in", result=f"failed: {how}")
                     return None
                 cookie = websession.start_session(app, space)
                 space.audit(owner_ctx(user), "web:sign-in", result=f"ok: {how}")

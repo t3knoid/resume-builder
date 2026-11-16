@@ -196,7 +196,7 @@ def bootstrap(app: App, check_only: bool = False) -> dict:
             if not is_slug(default):
                 raise SystemExit(f"RB_DEFAULT_USER `{default}` is not a valid name. Use lowercase letters, digits and hyphens.")
             from .operations import invoke
-            invoke(app, RequestContext.system(default), "space_init", {})
+            invoke(app, app.context("system", default), "space_init", {})
             report["created_user"] = default
             users = [default]
         else:
@@ -204,7 +204,7 @@ def bootstrap(app: App, check_only: bool = False) -> dict:
                               "docker compose run --rm app rb init-user <your-name>")
     for user in users:
         space = app.space(user)
-        ctx = RequestContext.system(user)
+        ctx = app.context("system", user)
         entry: dict = {}
         if not check_only:
             entry["created"] = repair(space, ctx)
