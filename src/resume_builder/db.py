@@ -9,6 +9,7 @@ import contextlib
 import fcntl
 import sqlite3
 import tempfile
+import threading
 from pathlib import Path
 
 from .clock import now_iso, now_iso_precise  # noqa: F401  (re-exported)
@@ -24,16 +25,38 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+_nesting = threading.local()  # per thread: id(conn) -> how many transactions are open on it
+
+
 @contextlib.contextmanager
 def transaction(conn: sqlite3.Connection):
-    conn.execute("BEGIN IMMEDIATE")
+    """All or nothing. Nested calls in the same thread become savepoints inside the outer transaction.
+
+    So an operation's own transaction can run inside a caller's, which commits or rolls back the
+    whole (the sync adapter's dry run, R7.7).
+    """
+    depths = _nesting.__dict__.setdefault("depths", {})
+    depth = depths.get(id(conn), 0)
+    if depth == 0:
+        begin, commit, rollback = "BEGIN IMMEDIATE", "COMMIT", "ROLLBACK"
+    else:
+        sp = f"rb_sp_{depth}"
+        begin, commit, rollback = f"SAVEPOINT {sp}", f"RELEASE {sp}", f"ROLLBACK TO {sp}; RELEASE {sp}"
+    conn.execute(begin)
+    depths[id(conn)] = depth + 1
     try:
         yield conn
     except BaseException:
-        conn.execute("ROLLBACK")
+        depths[id(conn)] = depth
+        for stmt in rollback.split("; "):
+            conn.execute(stmt)
         raise
     else:
-        conn.execute("COMMIT")
+        depths[id(conn)] = depth
+        conn.execute(commit)
+    finally:
+        if depths.get(id(conn)) == 0:
+            depths.pop(id(conn), None)
 
 
 def current_version(conn: sqlite3.Connection) -> int:

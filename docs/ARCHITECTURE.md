@@ -167,7 +167,7 @@ Every call carries a `RequestContext`: `actor` (`owner`, `agent`, `system` or `a
 | `web` | Website pages, and the owner's signed-in `POST` actions |
 | `mcp` | The MCP server over stdio (`rb mcp`) |
 | `mcp-http` | The MCP server over HTTP (`POST /mcp/{user}`) |
-| `yaml-sync` | Changes applied from the user's YAML and Markdown files |
+| `yaml-sync` | Changes applied from the user's YAML and Markdown files, always as the owner |
 | `bootstrap` | Container start: migrations and the first sync |
 
 The agent status uses the channel to tell an assistant that reached the app itself (`mcp`, `mcp-http`, `api`) from drafts pasted through the CLI. A host adding an interface should give it its own channel name.
@@ -184,7 +184,7 @@ The agent status uses the channel to tell an assistant that reached the app itse
 - the audit log, sync state and tokens, plus the queries the agent status uses (`last_audit_at`, `audit_entries_by`, `active_token_created`, `replaced_token_actor`);
 - website sign-in: sessions and one-time login codes, stored only as hashes.
 
-It also has `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
+It also has `transaction()` (all or nothing; a `transaction()` opened inside another one in the same thread is a savepoint, so an operation can run inside a caller's transaction, which commits or rolls back the whole), `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
 
 `repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, intake proposals and application drafts are kept and resolved once (pending to confirmed or discarded, never back, never deleted; `0003` and `0006` enforce this with triggers), sessions, login codes and tokens are stored only as hashes, a login code works once, and every record carries `created_by/at` and `updated_by/at`.
 
@@ -193,6 +193,20 @@ It also has `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (cl
 The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`, and `job_intake_preview_file` and `library_import_file`, which read a file the user saved in their intake folder and hand its text to the service; `library_import_file` first converts a Word or PDF file to text with `resume_readers.py`, within size limits, and extracts a PDF in a child process with a time limit) and the bootstrap.
 
 Services never write those files. After a write they call `space.changed(kind, key)`, and every change listener on the App receives a `Change`. Locally that listener is `sync_ops.write_back`, which updates the working copy and keeps comments. A host without user files passes `change_listeners=[]`, or its own listeners.
+
+The other direction goes through operations too. The adapter reads, checks and merges a changed file, then applies it with one `invoke()` call as the owner on channel `yaml-sync`, so it gets the same policy check, validation and audit as the CLI and API:
+
+| File | Operation | Permission |
+| --- | --- | --- |
+| `user.yaml` | `settings_replace` | `settings:write` |
+| `organizations.yaml` | `registry_replace` | `organization:write` |
+| `base.yaml` | `library_replace` | `content:confirm` |
+| `profiles/public.yaml`, `jobs/<id>/profile.yaml` | `profile_write` | `profile:write` |
+| `jobs/<id>/application.yaml` | `application_replace` | `application:write` |
+| `jobs/<id>/posting.md` | `posting_replace` | `application:write` |
+| fit report, cover letter, answers | `document_propose` (as the owner's edit) | `letter:propose` |
+
+The replace operations (`services/replace.py`) archive what's left out and refuse a change to recorded events; a host can call them to import a user's data in bulk. The call runs inside the adapter's transaction, which a dry run (`sync --check`) rolls back, audit entry included. While it runs, the adapter holds change notifications (`changes.hold_changes()`): after the commit it sends them on with `space.notify()`, except the change to the file being synced, which the adapter records itself; after a dry run it drops them.
 
 Data moves both ways:
 
@@ -204,7 +218,7 @@ flowchart LR
         V --> M["Three-way merge with<br/>the last synced copy"]
         M -->|"same field changed<br/>on both sides"| CF["Stop, report the conflict<br/>in SYNC-STATUS.md"]
         M --> BK["Back up the database"]
-        BK --> D["Dry run in a transaction"]
+        BK --> D["invoke() the operation as the owner,<br/>in a transaction (dry run)"]
         D -->|"fails"| KG["Keep the last good state,<br/>report the problem"]
     end
     ST[("Storage")]

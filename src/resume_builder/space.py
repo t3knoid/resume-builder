@@ -61,9 +61,17 @@ class UserSpace:
 
         Returns True if any listener updated a copy the user sees (locally: a working-copy file).
         """
-        from .changes import Change
+        from .changes import Change, held
 
         change = Change(kind, key, doc_kind, slug)
+        holding = held()
+        if holding is not None:  # inside hold_changes(): sent after the caller's transaction commits
+            holding.append((self, change))
+            return False
+        return self.notify(change)
+
+    def notify(self, change) -> bool:
+        """Send one `Change` to the App's change listeners now."""
         return any([listener(self, change) for listener in self.app.change_listeners])
 
     # ------------------------------------------------------------ settings

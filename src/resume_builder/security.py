@@ -15,6 +15,7 @@ from .errors import PermissionDenied
 
 PERMISSIONS = frozenset({
     "content:read", "content:propose", "content:confirm",
+    "settings:write",
     "profile:read", "profile:write",
     "resume:render",
     "letter:read", "letter:propose", "letter:approve",

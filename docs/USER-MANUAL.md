@@ -201,7 +201,7 @@ Each changed file goes through these checks, in order. A file that fails any of 
 4. **References:** everything a file points to exists (bullet ids, company slugs).
 5. **History:** recorded events can't change, and job ids can't change.
 6. **Conflicts:** your edits are compared with changes the app made since the last sync.
-7. **Database check:** the change is tried inside a transaction, so the database's own rules are checked too, before it's committed.
+7. **Database check:** the change is made by the same operation a command would use (with its permission check), inside a transaction, so the app's and the database's own rules are checked too, before it's committed. It's recorded in the audit log (`rb audit`) as yours, on channel `yaml-sync`.
 
 Files are applied one at a time in this order: `user.yaml`, `organizations.yaml`, `base.yaml`, profiles, then each job. A mistake in one file doesn't hold up the others, except files that depend on it, which wait until it's fixed.
 
@@ -687,7 +687,7 @@ rb approve <job-id> answer                 # answers/why-here.md
 rb approve <job-id> answer --slug other    # answers/other.md
 ```
 
-Approving saves a snapshot and gives you its id. Editing an approved document makes it a draft again.
+Approving saves a snapshot and gives you its id. Editing an approved document makes it a draft again. So does changing that job's tailored profile, in `profile.yaml` or through the agent: the letter or answer is flagged as out of date, to check and approve again.
 
 ### A short message instead of a cover letter
 

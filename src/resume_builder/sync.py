@@ -4,18 +4,25 @@ The database is the source of truth. User files are input. For each changed file
 order (R7.8): safe read -> schema -> content rules -> references -> history -> three-way merge
 -> database dry run in a transaction -> commit. A file is applied whole or not at all, and a
 failed file keeps its last good state in the database.
+
+Applying a file is an operation call through `invoke()`, as the owner on the `yaml-sync` channel
+(issue #5): `settings_replace`, `registry_replace`, `library_replace`, `profile_write`,
+`application_replace`, `posting_replace` and `document_propose`. So file edits get the same
+permission check, validation and audit as the CLI and API. The call runs inside this adapter's
+transaction (the operation's own transaction becomes a savepoint), which a dry run rolls back.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
 from pydantic import BaseModel, ValidationError
 
 from . import db, yamlio
+from .changes import Change, hold_changes
 from .errors import AppError, Problem
 from .layout import doc_rel
 from .models import (
@@ -24,7 +31,7 @@ from .models import (
 from .security import RequestContext
 from .space import UserSpace, file_hash
 from .validation import (
-    pydantic_problems, stage_after, validate_application, validate_library, validate_profile, validate_registry,
+    pydantic_problems, validate_application, validate_library, validate_profile, validate_registry,
 )
 
 _MISSING = object()
@@ -194,7 +201,9 @@ def plan(space: UserSpace) -> list[str]:
 def run_sync(space: UserSpace, ctx: RequestContext, check_only: bool = False, prefer: dict[str, str] | None = None) -> SyncReport:
     """Sync changed input files into the database. `prefer` maps file -> 'file' | 'app' to resolve conflicts."""
     prefer = prefer or {}
-    ctx = ctx.with_channel("yaml-sync")
+    # The files are the owner's own input, whoever started the sync (bootstrap, the watcher, the
+    # CLI), so each file is applied as the owner on the yaml-sync channel (issue #5).
+    ctx = replace(ctx, actor="owner", roles=("owner",), user_id=space.user, channel="yaml-sync")
     report = SyncReport()
     with db.file_lock(space.lock_path):
         run_id = None if check_only else space.repo.start_sync_run()
@@ -348,30 +357,24 @@ def _sync_yaml(space: UserSpace, ctx, rel, path: Path, row, check_only, ensure_b
     if any(p.severity == "error" for p in problems):
         return FileResult(rel, "failed", problems)
 
-    # Stage 7: apply inside a transaction; constraints are checked by the database too.
+    # Stage 7: apply through the operation inside a transaction; constraints are checked by the database too.
     if not check_only:
         ensure_backup()
+    op, payload = _OPERATIONS[kind](key, merged_model)
     try:
-        with space.repo.transaction():
-            _apply(space, ctx, kind, key, merged_model)
-            if check_only:
-                raise _DryRun()
-    except _DryRun:
-        return FileResult(rel, "applied", [Problem("Would be applied.", file=rel, severity="warning")] + problems)
+        if _run(space, ctx, op, payload, Change(kind, key), check_only) is _DRY_RUN:
+            return FileResult(rel, "applied", [Problem("Would be applied.", file=rel, severity="warning")] + problems)
     except AppError as exc:
         return FileResult(rel, "failed", exc.problems or [Problem(exc.message, file=rel)])
     except Exception as exc:  # sqlite3.IntegrityError and friends
         return FileResult(rel, "failed", [Problem(f"The database rejected this change: {exc}.", file=rel)])
 
     merged_plain = merged_model.model_dump(mode="json")
-    space.audit(ctx, f"sync:{kind}", target=key or rel)
     if merged_plain != file_plain:
         space.write_back_yaml(rel, merged_plain, force=True,
                               file_plain=tidy_application(merged_plain) if kind == "application" else None)
     else:
         space.repo.put_sync_file(rel, file_hash(path), merged_plain, "applied", [p.to_dict() for p in problems], version)
-    if kind == "application":
-        _post_application(space, ctx, key)
     return FileResult(rel, "applied", problems)
 
 
@@ -437,25 +440,44 @@ def _export(space: UserSpace, kind: str, key: str | None):
     }[kind]()
 
 
-def _apply(space: UserSpace, ctx: RequestContext, kind: str, key: str | None, model: BaseModel) -> None:
-    actor = ctx.actor
-    if kind == "settings":
-        space.repo.put_settings(model, actor)
-    elif kind == "registry":
-        space.repo.replace_registry(model, actor)
-    elif kind == "library":
-        space.repo.replace_library(model, actor)
-    elif kind == "profile":
-        space.repo.save_profile(key, model, actor)
-    elif kind == "application":
-        stage, _ = stage_after(model.events)
-        space.repo.save_application(model, stage, actor)
+# The operation that applies each kind of YAML file, and its input.
+_OPERATIONS: dict[str, Callable[[str | None, BaseModel], tuple[str, dict]]] = {
+    "settings": lambda key, m: ("settings_replace", {"settings": m}),
+    "registry": lambda key, m: ("registry_replace", {"registry": m}),
+    "library": lambda key, m: ("library_replace", {"library": m}),
+    "profile": lambda key, m: ("profile_write", {"key": key, "profile": m}),
+    "application": lambda key, m: ("application_replace", {"application": m}),
+}
+
+_DRY_RUN = object()
 
 
-def _post_application(space: UserSpace, ctx, job_id: str) -> None:
-    """Mark snapshots referenced as sent so they are protected (R12.10)."""
-    from .services.snapshots import mark_sent_from_application
-    mark_sent_from_application(space, job_id)
+def _run(space: UserSpace, ctx: RequestContext, op: str, payload: dict, own: Change, check_only: bool) -> Any:
+    """Apply one file: `invoke()` the operation inside a transaction, all or nothing (R7.7).
+
+    Change notifications are held until the transaction commits, then sent, except `own`: the
+    change to the file being synced, which this adapter records itself. A dry run rolls everything
+    back, audit entry included, and sends nothing.
+    """
+    from .operations import invoke
+
+    with hold_changes() as held:
+        try:
+            with space.repo.transaction():
+                result = invoke(space.app, ctx, op, payload)
+                if check_only:
+                    raise _DryRun()
+        except _DryRun:
+            return _DRY_RUN
+    for sp, change in dict.fromkeys(held):
+        if change != own:
+            sp.notify(change)
+    return result
+
+
+def _problems(dicts: list[dict]) -> list[Problem]:
+    fields = Problem.__dataclass_fields__
+    return [Problem(**{k: v for k, v in d.items() if k in fields}) for d in dicts]
 
 
 def _sync_markdown(space: UserSpace, ctx, rel, path: Path, row, check_only, ensure_backup, force_file) -> FileResult:
@@ -476,9 +498,7 @@ def _sync_markdown(space: UserSpace, ctx, rel, path: Path, row, check_only, ensu
             return FileResult(rel, "conflict", [Problem("The posting was changed both here and by the app. Run `rb resolve` to pick one.", file=rel)])
         if not check_only:
             ensure_backup()
-            with space.repo.transaction():
-                space.repo.set_posting(job_id, merged)
-            space.audit(ctx, "sync:posting", target=job_id)
+        if _run(space, ctx, "posting_replace", {"job_id": job_id, "text": merged}, Change("posting", job_id), check_only) is not _DRY_RUN:
             space.repo.put_sync_file(rel, file_hash(path), {"text": merged}, "applied", [])
         return FileResult(rel, "applied")
 
@@ -495,20 +515,20 @@ def _sync_markdown(space: UserSpace, ctx, rel, path: Path, row, check_only, ensu
         if not check_only:
             space.repo.put_sync_file(rel, file_hash(path), {"text": merged}, "applied", [])
         return FileResult(rel, "applied")
-    from .services.documents import check_document
-    findings = check_document(space, job_id, kind, merged, owner_edit=True) if kind != "fit_report" else []
     if not check_only:
         ensure_backup()
-        question = existing["question"] if existing else DEFAULT_QUESTIONS.get(slug, slug.replace("-", " ").capitalize() + "?")
-        with space.repo.transaction():
-            # An edited document needs approving again (R9.12).
-            space.repo.save_document(job_id, kind, slug, merged, "draft", ctx.actor, question=question,
-                                     warnings=[f.to_dict() for f in findings])
-        space.audit(ctx, f"sync:{kind}", target=job_id)
-        write_back_document(space, job_id, kind, slug) or space.repo.put_sync_file(rel, file_hash(path), {"text": merged}, "applied", [])
-        # write_back_document refuses when the file has unsynced edits; we just synced them, so force it:
-        space.write_back_text(rel, doc_header(job_id, kind, slug, "draft") + merged, merged, force=True)
-    return FileResult(rel, "applied", findings)
+    # The owner's own edit: honesty findings are recorded as warnings, and the document goes back
+    # to draft, so it needs approving again (D10, R9.12).
+    question = existing["question"] if existing else DEFAULT_QUESTIONS.get(slug, slug.replace("-", " ").capitalize() + "?")
+    payload = {"job_id": job_id, "kind": kind, "text": merged,
+               **({"slug": slug, "question": question} if kind == "answer" else {})}
+    out = _run(space, ctx, "document_propose", payload, Change("document", job_id, kind, slug), check_only)
+    if out is _DRY_RUN:
+        return FileResult(rel, "applied")
+    stored = space.repo.get_document(job_id, kind, slug)["text"]
+    # The file had unsynced edits until now, so the usual write-back would refuse: force it.
+    space.write_back_text(rel, doc_header(job_id, kind, slug, "draft") + stored, stored, force=True)
+    return FileResult(rel, "applied", _problems(out.get("warnings", [])))
 
 
 def _resolve_keep_app(space: UserSpace, rel: str) -> None:
