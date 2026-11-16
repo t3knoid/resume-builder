@@ -53,7 +53,7 @@ LABELS = {
     "salary_range": ("salary", "salary range", "pay range", "compensation", "base salary", "base pay range", "pay"),
     "date_posted": ("posted", "posted on", "date posted", "posting date", "post date", "published"),
     "closing_date": ("closing date", "close date", "apply by", "application deadline", "deadline", "post until",
-                     "posting end date", "applications close"),
+                     "posted until", "open until", "posting end date", "applications close"),
     "department": ("department", "division", "agency", "business unit"),
     "work_arrangement": ("work arrangement", "workplace type", "work type", "remote", "work location type", "work model"),
 }
@@ -235,6 +235,7 @@ def check(capture: PostingCapture, fields: list[ExtractedField]) -> None:
 class Extraction:
     fields: dict[str, ExtractedField] = field(default_factory=dict)
     disagreements: list[str] = field(default_factory=list)  # structured data and text that say different things
+    captured_on: date | None = None  # when the posting was fetched or read
 
     def put(self, name: str, value, passage: str, origin: str) -> None:
         if value is None or not str(value).strip() or not passage or not passage.strip():
@@ -262,7 +263,8 @@ def extract(capture: PostingCapture, first: list[ExtractedField] | tuple = ()) -
     """Fields the posting states, structured data first (R13.14). `first` (for example a site
     adapter's fields) takes precedence over both. Every value passes `verify`; anything that doesn't
     is dropped rather than kept."""
-    out = Extraction()
+    found = dates_in(capture.captured_at or "")
+    out = Extraction(captured_on=found[0] if found else None)
     for f in first:
         out.put(f.name, f.value, f.passage, f.origin)
     if capture.content_type == "text/html":
@@ -292,11 +294,22 @@ def _from_job_posting(jp: dict, out: Extraction) -> None:
         put("external_id", str(ident["value"]), ident)
     elif isinstance(ident, (str, int)):
         put("external_id", str(ident), str(ident))
+    found_dates = {}
     for key, name in (("datePosted", "date_posted"), ("validThrough", "closing_date")):
         if isinstance(jp.get(key), str):
             found = dates_in(jp[key])
             if found:
-                put(name, found[0].isoformat(), jp[key])
+                found_dates[name] = found[0]
+    if "date_posted" in found_dates:
+        put("date_posted", found_dates["date_posted"].isoformat(), jp["datePosted"])
+    closing = found_dates.get("closing_date")
+    if closing:
+        why = _implausible_closing(closing, found_dates.get("date_posted") or out.captured_on)
+        if why:  # e.g. the posting date plus 100 years, a site's way of saying "no end date": read the text instead
+            out.disagreements.append(f"closing_date: the page's structured data says {closing.isoformat()!r}, {why}, "
+                                     "so it wasn't used. Check the posting for the real date.")
+        else:
+            put("closing_date", closing.isoformat(), jp["validThrough"])
     loc_type = jp.get("jobLocationType")
     if isinstance(loc_type, str) and loc_type.upper() == "TELECOMMUTE":
         put("work_arrangement", "remote", loc_type)
@@ -306,6 +319,21 @@ def _from_job_posting(jp: dict, out: Extraction) -> None:
     salary = _salary(jp.get("baseSalary"))
     if salary:
         put("salary_range", salary[0], salary[1])
+
+
+# A closing date further out than this from the posting date is a placeholder, not a deadline.
+MAX_OPEN_DAYS = 2 * 366
+
+
+def _implausible_closing(closing: date, start: date | None) -> str | None:
+    """Why a structured closing date can't be right, or None."""
+    if start is None:
+        return None
+    if closing < start:
+        return f"which is before {start.isoformat()}, when it was posted"
+    if (closing - start).days > MAX_OPEN_DAYS:
+        return f'more than two years after {start.isoformat()}, which looks like a placeholder for "no end date"'
+    return None
 
 
 def _location(loc) -> tuple[str, dict] | None:
@@ -382,7 +410,7 @@ def _from_text(capture: PostingCapture, out: Extraction) -> None:
     m = SALARY_RE.search(md)
     if m:
         out.put("salary_range", m[0], _line_of(md, m.start()), "rule")
-    m = re.search(r"\bposted(?:\s+on)?\s*:?\s*(.{6,30})", md, re.I)
+    m = re.search(r"\bposted(?!\s+until\b)(?:\s+on)?\s*:?\s*(.{6,30})", md, re.I)
     if m:
         found = dates_in(m[1])
         if found:

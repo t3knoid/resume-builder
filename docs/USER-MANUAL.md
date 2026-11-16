@@ -516,7 +516,7 @@ It fetches the page once, keeps a copy of the posting exactly as published, and 
 - each value, and where it came from (the page's own job data, the posting text, or you);
 - the company and department, matched against your registry (section 6);
 - what the posting doesn't state (left empty, never guessed);
-- anything to check, for example a date that the page's data and its text give differently;
+- anything to check, for example a date that the page's data and its text give differently, or a closing date in the page's data that can't be right (more than two years after posting, or before it), which isn't used;
 - any job you're already tracking with the same link or posting id.
 
 Then it asks once: press Enter to create the job, or type a field name to change that value first. If the company isn't in your registry, it offers the closest matches or to add it. Nothing is created until you confirm.

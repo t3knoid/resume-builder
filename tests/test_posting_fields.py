@@ -52,6 +52,35 @@ def test_structured_data_comes_first():
     assert ex.fields["title"].origin == "structured" and ex.fields["source"].origin == "rule"
 
 
+def test_placeholder_closing_date_in_structured_data_is_not_used():
+    """A site that writes the posting date + 100 years as validThrough: the page's "Posted until" wins."""
+    ex = extract(html_capture("placeholder-closing.html"))
+    v = values(ex)
+    assert v["closing_date"] == "2026-11-18"
+    assert ex.fields["closing_date"].origin == "rule"
+    assert v["date_posted"] == "2026-11-12"  # "Posted until" isn't read as the posting date
+    assert any(d.startswith("closing_date") and "2126-11-12" in d and "placeholder" in d for d in ex.disagreements)
+    assert not any(d.startswith("date_posted") for d in ex.disagreements)
+
+
+@pytest.mark.parametrize("valid_through, kept", [
+    ("2026-12-31", True),     # a normal deadline
+    ("2028-11-01", True),     # long, but within two years
+    ("2029-01-01", False),    # more than two years after posting
+    ("2026-11-01", False),    # before it was posted
+])
+def test_structured_closing_date_must_be_plausible(valid_through, kept):
+    raw = ('<html><head><script type="application/ld+json">{"@context": "https://schema.org", "@type": "JobPosting", '
+           f'"title": "Analyst", "datePosted": "2026-11-10", "validThrough": "{valid_through}"}}</script></head>'
+           '<body><h1>Analyst</h1></body></html>')
+    capture = PostingCapture(source_kind="url", source_url="https://careers.example.com/jobs/1", content_type="text/html",
+                             raw_content=raw, markdown="# Analyst\n\nReview reports and answer questions about them.\n",
+                             captured_at="2026-11-15T10:00:00+00:00")
+    ex = extract(capture)
+    assert (values(ex).get("closing_date") == valid_through) is kept
+    assert any(d.startswith("closing_date") for d in ex.disagreements) is not kept
+
+
 def test_rules_only_page():
     v = values(extract(html_capture("typical.html")))
     assert v == {
