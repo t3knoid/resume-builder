@@ -90,7 +90,7 @@ def test_linking_to_an_unknown_job_is_refused(sample):
 # ---------------------------------------------------------------- append-only
 
 def test_storage_offers_no_way_to_edit_or_delete_a_capture():
-    names = [n for n in vars(storage.Storage) if "capture" in n]
+    names = [n for n in storage.method_names(storage.IntakeStore) if "capture" in n]
     assert names and not [n for n in names if n.startswith(("update", "delete", "set", "replace", "put"))]
 
 

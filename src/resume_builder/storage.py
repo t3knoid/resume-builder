@@ -1,6 +1,8 @@
 """The storage interface services use (PRD A2, A4).
 
-Services and the sync adapter call only these methods, through `space.repo`. They never see SQL,
+Services and the sync adapter call only these methods, through `space.repo`. The interface is split
+into one protocol per area (`ContentStore`, `OrganizationStore`, `ApplicationStore`, ...), and
+`Storage` combines them, so a backend or a test fake can be checked against just the parts it needs. They never see SQL,
 connections or driver row types: rows are plain dicts. SQLite (`repositories.SqliteStorage`) is the
 only backend here. A host can supply another one through `App(storage_factory=...)`: a callable
 `(app, user_id) -> Storage`.
@@ -25,8 +27,9 @@ from .models import Application, ContentLibrary, Event, OrganizationRegistry, Po
 Row = dict[str, Any]
 
 
-class Storage(Protocol):
-    # ------------------------------------------------------------ lifecycle
+class StorageLifecycle(Protocol):
+    """Transactions, schema, backup copies and closing. Every backend needs this part."""
+
     def transaction(self) -> AbstractContextManager[Any]: ...
     def migrate(self, backup_fn: Callable[[str], Any] | None = None) -> list[int]: ...
     def schema_version(self) -> int: ...
@@ -41,25 +44,41 @@ class Storage(Protocol):
         """Close and permanently delete everything stored for this user (`rb delete-user`)."""
         ...
 
-    # ------------------------------------------------------------ meta and settings
+
+
+class SettingsStore(Protocol):
+    """Small key-value facts about the user space, and the user's settings (user.yaml)."""
+
     def meta_get(self, key: str) -> str | None: ...
     def meta_set(self, key: str, value: str) -> None: ...
     def get_settings(self) -> UserSettings | None: ...
     def put_settings(self, s: UserSettings, actor: str) -> None: ...
 
-    # ------------------------------------------------------------ content library
+
+
+class ContentStore(Protocol):
+    """The content library: summary phrases, roles, bullets, projects, education, skills (archived, never deleted)."""
+
     def load_library(self, include_archived: bool = False) -> ContentLibrary: ...
     def has_library(self) -> bool: ...
     def archived_ids(self) -> set[str]: ...
     def replace_library(self, lib: ContentLibrary, actor: str) -> None: ...
 
-    # ------------------------------------------------------------ organizations
+
+
+class OrganizationStore(Protocol):
+    """The organization registry: companies and departments (archived, never deleted)."""
+
     def load_registry(self, include_archived: bool = False) -> OrganizationRegistry: ...
     def has_registry(self) -> bool: ...
     def replace_registry(self, reg: OrganizationRegistry, actor: str) -> None: ...
     def reassign_company(self, from_slug: str, to_slug: str) -> int: ...
 
-    # ------------------------------------------------------------ applications and events
+
+
+class ApplicationStore(Protocol):
+    """Applications, their append-only events, postings, and drafts waiting for the owner."""
+
     def job_ids(self, include_archived: bool = True) -> list[str]: ...
     def get_application(self, job_id: str) -> Application: ...
     def application_row(self, job_id: str) -> Row | None: ...
@@ -80,7 +99,11 @@ class Storage(Protocol):
         """Mark a pending draft confirmed or discarded. Only once."""
         ...
 
-    # ------------------------------------------------------------ captured postings (append-only, R13.10)
+
+
+class IntakeStore(Protocol):
+    """Captured postings (append-only, R13.10) and intake proposals (R13.22–R13.24)."""
+
     def add_posting_capture(self, capture: PostingCapture, actor: str) -> PostingCapture:
         """Store a new capture; storage sets id, content_hash, created_by and created_at."""
         ...
@@ -96,7 +119,6 @@ class Storage(Protocol):
     def file_posting_captures(self) -> list[Row]:
         """Captures read from the user's intake folder and used for a job: source_path, job_id, content_hash."""
         ...
-    # ------------------------------------------------------------ intake proposals (R13.22–R13.24)
     def add_intake_proposal(self, capture_id: int, data: dict, note: str | None, actor: str) -> int: ...
     def get_intake_proposal(self, proposal_id: int) -> Row | None: ...
     def list_intake_proposals(self, status: str | None = "pending") -> list[Row]: ...
@@ -108,7 +130,11 @@ class Storage(Protocol):
         """Link a capture that has no job yet to a job. Allowed once; a capture is never moved."""
         ...
 
-    # ------------------------------------------------------------ profiles and documents
+
+
+class ProfileDocumentStore(Protocol):
+    """Tailored and public profiles; fit reports, cover letters and answers."""
+
     def get_profile(self, key: str) -> Profile | None: ...
     def save_profile(self, key: str, profile: Profile, actor: str) -> None: ...
     def profile_row(self, key: str) -> Row | None: ...
@@ -118,7 +144,11 @@ class Storage(Protocol):
                       question: str | None = None, warnings: list | None = None,
                       approved_snapshot: str | None = None) -> None: ...
 
-    # ------------------------------------------------------------ snapshots
+
+
+class SnapshotStore(Protocol):
+    """Snapshots of generated documents. Deleted only through `delete_snapshot`, which services audit."""
+
     def get_snapshot(self, snapshot_id: str) -> Row | None: ...
     def insert_snapshot(self, sid: str, job_key: str, doc_type: str, preview: bool, reason: str, data: str,
                         bullet_ids: list[str], actor: str, created_at: str) -> None: ...
@@ -132,9 +162,22 @@ class Storage(Protocol):
     def delete_snapshot(self, sid: str) -> None: ...
     def snapshot_bullets(self, sid: str) -> list[str]: ...
 
-    # ------------------------------------------------------------ audit, sync state, tokens
+
+class AuditStore(Protocol):
+    """The audit log (B6), and the queries the agent status uses."""
+
     def audit(self, actor: str, channel: str, request_id: str, operation: str, target: str, result: str) -> None: ...
     def audit_entries(self, limit: int = 100) -> list[Row]: ...
+    def audit_entries_by(self, actor: str, limit: int = 20) -> list[Row]: ...
+    def last_audit_at(self, actor: str, channel: str, exclude: tuple[str, ...] = ()) -> str | None:
+        """When `actor` last did something audited on `channel`, ignoring the `exclude` operations."""
+        ...
+
+
+
+class SyncStateStore(Protocol):
+    """What the YAML/Markdown sync adapter last applied from each file, and its runs."""
+
     def sync_file(self, path: str) -> Row | None: ...
     def sync_files(self) -> list[Row]: ...
     def put_sync_file(self, path: str, hash_: str, content: Any, result: str, problems: list[dict],
@@ -143,6 +186,11 @@ class Storage(Protocol):
     def start_sync_run(self) -> int: ...
     def finish_sync_run(self, run_id: int, applied: int, failed: int, summary: dict) -> None: ...
     def last_sync_run(self) -> Row | None: ...
+
+
+class TokenStore(Protocol):
+    """Actor tokens, website sessions and one-time login codes, stored only as hashes."""
+
     def add_token(self, actor: str, token_hash: str) -> None: ...
     def revoke_tokens(self, actor: str) -> None: ...
     def token_actor(self, token_hash: str) -> str | None: ...
@@ -153,12 +201,6 @@ class Storage(Protocol):
     def replaced_token_actor(self, token_hash: str) -> str | None:
         """The actor of a token that was replaced (revoked), or None."""
         ...
-    def audit_entries_by(self, actor: str, limit: int = 20) -> list[Row]: ...
-    def last_audit_at(self, actor: str, channel: str, exclude: tuple[str, ...] = ()) -> str | None:
-        """When `actor` last did something audited on `channel`, ignoring the `exclude` operations."""
-        ...
-
-    # ------------------------------------------------------------ website sign-in (hashes only)
     def add_web_session(self, session_hash: str, actor: str, expires_at: str) -> None: ...
     def web_session(self, session_hash: str) -> Row | None: ...
     def touch_web_session(self, session_hash: str, last_seen_at: str) -> None: ...
@@ -167,6 +209,27 @@ class Storage(Protocol):
     def use_login_code(self, code_hash: str, now: str) -> bool:
         """Mark an unused, unexpired code used. True if it was valid; a code works once."""
         ...
+
+
+class Storage(StorageLifecycle, SettingsStore, ContentStore, OrganizationStore, ApplicationStore, IntakeStore,
+              ProfileDocumentStore, SnapshotStore, AuditStore, SyncStateStore, TokenStore, Protocol):
+    """Everything services use through `space.repo`: all the parts together.
+
+    A backend implements every part. A partial backend, such as a test fake or a host that keeps
+    only some data, implements the parts the operations it serves use: `StorageLifecycle`
+    (`transaction`, `migrate`, `schema_version`, `close`), `AuditStore.audit` for writes, and the
+    part those operations read and write (for the organization operations, `OrganizationStore`).
+    """
+
+
+# The parts, in the order above. `Storage` adds no methods of its own.
+PARTS: tuple[type, ...] = (StorageLifecycle, SettingsStore, ContentStore, OrganizationStore, ApplicationStore, IntakeStore,
+                           ProfileDocumentStore, SnapshotStore, AuditStore, SyncStateStore, TokenStore)
+
+
+def method_names(*parts: type) -> set[str]:
+    """The methods the given parts declare (all parts when none are given)."""
+    return {n for part in (parts or PARTS) for n, v in vars(part).items() if callable(v) and not n.startswith("_")}
 
 
 StorageFactory = Callable[[Any, str], Storage]  # (app, user_id) -> Storage

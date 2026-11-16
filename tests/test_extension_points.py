@@ -20,6 +20,7 @@ from resume_builder.errors import NotFound, PermissionDenied, ValidationFailed
 from resume_builder.mcp import McpServer, tools_for
 from resume_builder.models import Company, OrganizationRegistry
 from resume_builder.operations import REGISTRY, invoke
+from resume_builder import storage
 from resume_builder.secretstore import DictSecretStore
 from resume_builder.security import RequestContext
 from resume_builder.services.render import contact_values, template_dir
@@ -57,7 +58,8 @@ class FakePlugin:
 # ---------------------------------------------------------------- an in-memory Storage
 
 class MemoryStorage:
-    """Just enough of storage.Storage for the organization operations, in memory."""
+    """Just the parts of storage.Storage the organization operations use, in memory:
+    `OrganizationStore`, plus the lifecycle methods every space needs and `audit` for writes."""
 
     def __init__(self):
         self.calls: list[str] = []
@@ -85,12 +87,45 @@ class MemoryStorage:
         self.calls.append("load_registry")
         return self.registry.model_copy(deep=True)
 
+    def has_registry(self):
+        return True
+
     def replace_registry(self, reg, actor):
         self.calls.append("replace_registry")
         self.registry = reg
 
+    def reassign_company(self, from_slug, to_slug):
+        self.calls.append("reassign_company")
+        return 0  # no applications in this store
+
     def audit(self, actor, channel, request_id, operation, target, result):
         self.audit_log.append((actor, channel, operation, target, result))
+
+
+# What MemoryStorage implements: the whole organizations part, and only the few other methods every space needs.
+MEMORY_PARTS = storage.method_names(storage.OrganizationStore)
+MEMORY_EXTRAS = {"transaction", "migrate", "schema_version", "close", "audit"}
+
+
+def test_storage_is_split_into_parts():
+    """Storage is only the parts combined; each method belongs to exactly one part (issue #9)."""
+    from resume_builder.repositories import SqliteStorage
+
+    assert not storage.method_names(storage.Storage) - storage.method_names()
+    assert {n for n, v in vars(storage.Storage).items() if callable(v) and not n.startswith("_")} == set()
+    seen: dict[str, str] = {}
+    for part in storage.PARTS:
+        for name in storage.method_names(part):
+            assert name not in seen, f"`{name}` is in both {seen[name]} and {part.__name__}"
+            seen[name] = part.__name__
+    missing = sorted(n for n in storage.method_names() if not callable(getattr(SqliteStorage, n, None)))
+    assert not missing, f"SqliteStorage lacks {missing}"
+
+
+def test_memory_storage_implements_just_the_parts_it_needs():
+    own = {n for n, v in vars(MemoryStorage).items() if callable(v) and not n.startswith("_")}
+    assert own == MEMORY_PARTS | MEMORY_EXTRAS
+    assert MEMORY_EXTRAS <= storage.method_names(storage.StorageLifecycle, storage.AuditStore)
 
 
 @pytest.fixture

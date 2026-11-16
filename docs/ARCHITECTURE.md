@@ -178,15 +178,25 @@ The agent status uses the channel to tell an assistant that reached the app itse
 
 ### 3. Storage (`storage.py`)
 
-`Storage` is the interface services use through `space.repo`. It covers:
+`Storage` is the interface services use through `space.repo`. It is split into one protocol per area, and `Storage` combines them:
 
-- the content library, organizations, applications and events;
-- drafts waiting for the owner: event drafts, intake proposals (jobs an agent proposed) and application drafts (changes an agent proposed to a job's own fields);
-- captured job postings, profiles, documents and snapshots;
-- the audit log, sync state and tokens, plus the queries the agent status uses (`last_audit_at`, `audit_entries_by`, `active_token_created`, `replaced_token_actor`);
-- website sign-in: sessions and one-time login codes, stored only as hashes.
+| Part | Covers |
+| --- | --- |
+| `StorageLifecycle` | `transaction()`, `migrate()`, `schema_version()`, `dump()`, `load()`, `close()`, `destroy()` |
+| `SettingsStore` | small facts about the user space (`meta_get`, `meta_set`) and the user's settings |
+| `ContentStore` | the content library |
+| `OrganizationStore` | the organization registry: companies and departments |
+| `ApplicationStore` | applications, their events and postings, event drafts and application drafts (changes an agent proposed to a job's own fields) |
+| `IntakeStore` | captured job postings and intake proposals (jobs an agent proposed) |
+| `ProfileDocumentStore` | profiles; fit reports, cover letters and answers |
+| `SnapshotStore` | snapshots of generated documents |
+| `AuditStore` | the audit log, plus the queries the agent status uses (`last_audit_at`, `audit_entries_by`) |
+| `SyncStateStore` | what the sync adapter last applied from each file, and its runs |
+| `TokenStore` | actor tokens, website sessions and one-time login codes, stored only as hashes |
 
-It also has `transaction()` (all or nothing; a `transaction()` opened inside another one in the same thread is a savepoint, so an operation can run inside a caller's transaction, which commits or rolls back the whole), `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
+Services keep calling `space.repo`. `storage.PARTS` lists the parts, and `storage.method_names(*parts)` gives the methods of some or all of them, so a backend or a test fake can be checked against just the parts it implements. A partial backend needs `StorageLifecycle`'s `transaction`, `migrate`, `schema_version` and `close`, `AuditStore.audit` for writes, and the parts its operations use: the extension test's `MemoryStorage` serves the organization operations with `OrganizationStore` alone.
+
+`StorageLifecycle` has `transaction()` (all or nothing; a `transaction()` opened inside another one in the same thread is a savepoint, so an operation can run inside a caller's transaction, which commits or rolls back the whole), `migrate()`, `dump()`, `load()` and `destroy()` (close and permanently delete the user's stored data, for `space_delete`). Rows come back as plain dicts.
 
 `repositories.SqliteStorage` is the only implementation here: one database per user space, with migrations in `src/resume_builder/migrations/`. Each migration runs in one transaction. A migration that rebuilds a table other tables refer to (SQLite's documented table rebuild, as in `0004`) starts with the line `-- rb:foreign-keys-off`: the runner then switches foreign keys off for that migration only, runs `PRAGMA foreign_key_check` before committing (any broken reference rolls it back), and switches them back on. The migrations are SQLite SQL. Another backend ships its own schema and must keep the same guarantees: transactions are all or nothing, content is archived rather than deleted, events and posting captures are append-only, intake proposals and application drafts are kept and resolved once (pending to confirmed or discarded, never back, never deleted; `0003` and `0006` enforce this with triggers), sessions, login codes and tokens are stored only as hashes, a login code works once, and every record carries `created_by/at` and `updated_by/at`.
 
