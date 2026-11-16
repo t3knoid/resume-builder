@@ -40,7 +40,11 @@ def run(sample, ctx, name: str = "resume.md", dry_run: bool = False) -> dict:
 
 @pytest.mark.parametrize("name", FORMATS)
 def test_every_format_reads_the_same(name):
-    p = resume_import.parse(text_of(name), name=name)
+    assert_reads_the_fixture(resume_import.parse(text_of(name), name=name))
+
+
+def assert_reads_the_fixture(p) -> None:
+    """The fictional resume in tests/fixtures/resumes/, whatever format it was read from."""
     assert [(r.title, r.company, r.location, r.start, r.end, len(r.bullets)) for r in p.roles] == [
         ("Platform Engineer", "Northwind Laboratories", "Remote", "2024-07", "present", 2),
         ("Senior Platform Engineer", "Fabrikam Logistics", "Portland, OR", "2021-04", "2024-06", 2),
@@ -239,6 +243,29 @@ def test_import_from_the_intake_folder(sample, owner, roots):
     with pytest.raises(ValidationFailed):
         invoke(sample.app, owner, "library_import_file", {"file": "../base.yaml"})
     assert data_file(roots, "intake/resume.html").read_text(encoding="utf-8") == text_of("resume.html")   # never changed
+
+
+@pytest.mark.parametrize("given", [
+    f".\\data\\{USER}\\intake\\resume.html",                    # the host's path, from the repo folder (PowerShell)
+    f"data/{USER}/intake/resume.html",
+    f"C:\\Users\\someone\\resume-builder\\data\\{USER}\\intake\\resume.html",
+    f"/home/someone/resume-builder/data/{USER}/intake/resume.html",
+    "resume.html",
+])
+def test_a_host_path_to_the_intake_folder_works(sample, owner, roots, given):
+    data_file(roots, "intake").mkdir(exist_ok=True)
+    data_file(roots, "intake/resume.html").write_text(text_of("resume.html"), encoding="utf-8")
+    out = invoke(sample.app, owner, "library_import_file", {"file": given, "dry_run": True})
+    assert out["file"] == "intake/resume.html" and out["added"]
+
+
+def test_a_path_to_another_users_intake_folder_is_not_read(sample, owner, roots):
+    data_file(roots, "intake").mkdir(exist_ok=True)
+    data_file(roots, "intake/resume.html").write_text(text_of("resume.html"), encoding="utf-8")
+    with pytest.raises(NotFound):
+        invoke(sample.app, owner, "library_import_file", {"file": "data/someone-else/intake/resume.html"})
+    with pytest.raises(ValidationFailed):
+        invoke(sample.app, owner, "library_import_file", {"file": f"data/{USER}/intake/../base.yaml"})
 
 
 def test_bad_input_is_refused(sample, owner):

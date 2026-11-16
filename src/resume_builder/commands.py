@@ -77,7 +77,7 @@ def catalog(job: str | None = None, snapshot: str | None = None, letter: str | N
             cmd("status", note="Sync problems, example entries left, and whether your AI agent is connected."),
             cmd("sync", note="Apply your file edits now. The app also does this by itself within seconds."),
             cmd("import-resume", "intake/<resume file>",
-                note="Start base.yaml from your existing resume (HTML, Markdown or text in your intake folder): adds drafts, asks first."),
+                note="Start base.yaml from your existing resume (Word, PDF, HTML, Markdown or text in your intake folder): adds drafts, asks first."),
             cmd("import-resume", "<link to your resume>",
                 note="The same from a link: your resume page, a Markdown or text file, or a shared Google Doc."),
             cmd("confirm", "--all", note="Confirm every draft item in base.yaml (it lists them and asks first)."),

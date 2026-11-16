@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -319,11 +320,19 @@ class IntakeFileIn(BaseModel):
     url: str | None = Field(None, description="The posting's link, recorded as its link (not fetched)")
 
 
-def intake_rel(name: str) -> str:
-    """`intake/<name>` for a file named relative to the user's folder or to the intake folder."""
+def intake_rel(name: str, user: str | None = None) -> str:
+    """`intake/<name>` for a file named relative to the user's folder or to the intake folder.
+    A path as the host sees it (`.\\data\\<user>\\intake\\resume.pdf`, or an absolute one) is accepted
+    too when it names this user's intake folder: the part after `<user>/intake/` is used."""
     rel = name.strip().replace("\\", "/")
     while rel.startswith("./"):
         rel = rel[2:]
+    parts = rel.split("/")
+    if user:
+        for i in range(1, len(parts) - 1):
+            if parts[i] == INTAKE_DIR and parts[i - 1] == user:
+                rel = "/".join(parts[i:])
+                break
     if not rel or rel.startswith("/") or ":" in rel.split("/", 1)[0] or ".." in rel.split("/"):
         raise ValidationFailed(f"`{name}` isn't a file in your intake folder. Example: intake/acme-sre.txt")
     return rel if rel.startswith(INTAKE_DIR + "/") else f"{INTAKE_DIR}/{rel}"
@@ -340,10 +349,10 @@ def job_intake_preview_file(space: UserSpace, ctx: RequestContext, data: IntakeF
     return preview_text(space, ctx, text, source_kind="file", source_path=rel, url=data.url)
 
 
-def read_intake_file(space: UserSpace, name: str, what: str, example: str) -> tuple[str, str]:
-    """(rel, text) of a file in the user's intake folder, read with the safe-reading limits (R7.7).
-    Only files inside the intake folder are read, and only when asked; nothing there is changed."""
-    rel = intake_rel(name)
+def intake_path(space: UserSpace, name: str, what: str, example: str) -> tuple[str, Path]:
+    """(rel, resolved path) of a file in the user's intake folder. Only files inside the intake folder
+    are read, and only when asked; nothing there is changed."""
+    rel = intake_rel(name, space.user)
     folder = (space.data_dir / INTAKE_DIR).resolve()
     try:
         real = (space.data_dir / rel).resolve(strict=True)
@@ -354,6 +363,12 @@ def read_intake_file(space: UserSpace, name: str, what: str, example: str) -> tu
     if real.name.lower() == "readme.md" and real.parent == folder:
         raise ValidationFailed(f"{INTAKE_DIR}/README.md explains the folder. Save {what} in a file of its own, "
                                f"for example {INTAKE_DIR}/{example}.")
+    return rel, real
+
+
+def read_intake_file(space: UserSpace, name: str, what: str, example: str) -> tuple[str, str]:
+    """(rel, text) of a text file in the user's intake folder, read with the safe-reading limits (R7.7)."""
+    rel, real = intake_path(space, name, what, example)
     text, problems = yamlio.read_text_safely(real, rel)
     if text is None:
         raise ValidationFailed(f"Can't read `{rel}`.", problems)
@@ -361,20 +376,46 @@ def read_intake_file(space: UserSpace, name: str, what: str, example: str) -> tu
 
 
 class ImportFileIn(BaseModel):
-    file: str = Field(description="Your resume saved in your intake folder, e.g. intake/resume.html (or .md, .txt)")
-    format: Literal["auto", "html", "markdown", "text"] = Field("auto", description="auto detects it from the file name and content")
+    file: str = Field(description="Your resume saved in your intake folder, e.g. intake/resume.docx (or .pdf, .html, .md, .txt)")
+    format: Literal["auto", "html", "markdown", "text", "docx", "pdf"] = Field(
+        "auto", description="auto detects it from the file's first bytes and its name")
     dry_run: bool = Field(True, description="Report what would be imported without changing anything. Set false to add the drafts.")
     expect_hash: str | None = Field(None, description="The content_hash a dry run returned: refuse if the resume "
                                                       "changed since (the CLI's preview, then import)")
 
 
+SAVE_AS_TEXT = "Save or export it as .docx, HTML or plain text and import that file instead."
+
+
 @operation("library_import_file", "content:propose", ImportFileIn,
-           "Like library_import, from a resume saved in the user's intake folder. Dry run by default.", writes=True)
+           "Like library_import, from a resume saved in the user's intake folder: Word (.docx), PDF, HTML, Markdown "
+           "or text. Dry run by default.", writes=True)
 def library_import_file(space: UserSpace, ctx: RequestContext, data: ImportFileIn) -> dict:
-    """The file adapter reads the file; the service does the rest (issue #1). The file is never changed."""
+    """The file adapter reads the file; the service does the rest (issues #1, #39). The file is never
+    changed. Word and PDF files are converted to text first (resume_readers), within size limits."""
+    from . import resume_readers as readers
     from .services.library_import import import_resume
 
-    rel, text = read_intake_file(space, data.file, "your resume", "resume.html")
+    rel, real = intake_path(space, data.file, "your resume", "resume.docx")
+    with real.open("rb") as f:
+        head = f.read(8)
+    kind = data.format if data.format in (readers.DOCX, readers.PDF) else (
+        readers.sniff(head, rel) if data.format == "auto" else None)
+    if kind == readers.DOC:
+        raise ValidationFailed(f"`{rel}` is in the old Word format (.doc), which can't be read. "
+                               "Open it in Word and save it as .docx (File > Save As), then import the .docx file.")
+    if kind in (readers.DOCX, readers.PDF):
+        if real.stat().st_size > readers.MAX_DOCUMENT_BYTES:
+            raise ValidationFailed(f"Can't read `{rel}`: it's larger than {readers.MAX_DOCUMENT_BYTES // 1_000_000} MB. {SAVE_AS_TEXT}")
+        raw = real.read_bytes()
+        try:
+            text = readers.docx_to_html(raw) if kind == readers.DOCX else readers.pdf_to_text(raw)
+        except readers.ReadFailed as exc:
+            raise ValidationFailed(f"Can't read `{rel}`: {exc.message}. {SAVE_AS_TEXT}") from None
+        out = import_resume(space, ctx, text, "html" if kind == readers.DOCX else "text", rel, data.dry_run,
+                            expect_hash=data.expect_hash, source_format=kind)
+        return {"file": rel, **out}
+    rel, text = read_intake_file(space, data.file, "your resume", "resume.docx")
     out = import_resume(space, ctx, text, data.format, rel, data.dry_run, expect_hash=data.expect_hash)
     return {"file": rel, **out}
 

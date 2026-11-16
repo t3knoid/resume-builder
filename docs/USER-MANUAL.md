@@ -270,10 +270,10 @@ Not every item has a `status`. Bullets, summary phrases, education, certificatio
 
 ### Starting from your existing resume
 
-You don't have to type `base.yaml` from scratch. If you have a resume as HTML, Markdown or plain text, import it:
+You don't have to type `base.yaml` from scratch. If you have a resume as a Word document (.docx), a PDF, HTML, Markdown or plain text, import it:
 
-1. Save it in your intake folder, for example `data/<your-name>/intake/resume.html` (or `.md`, `.txt`). For a PDF or Word file, save or export it as text or HTML first (in Word: **File > Save As > Plain Text** or **Web Page**).
-2. Run `rb import-resume intake/resume.html`.
+1. Save it in your intake folder, for example `data/<your-name>/intake/resume.docx` (or `.pdf`, `.html`, `.md`, `.txt`).
+2. Run `rb import-resume intake/resume.docx`.
 3. It shows what it found: the new items, anything that looks like something already in your library, anything it couldn't import and why, and what to check. Type `yes` to add the new items to `base.yaml`. Any other answer changes nothing.
 
 ```sh
@@ -299,6 +299,12 @@ rb import-resume --stdin --yes < resume.txt           # then import
 Get-Content resume.txt -Raw | rb import-resume --stdin          # Windows PowerShell: look first
 Get-Content resume.txt -Raw | rb import-resume --stdin --yes    # then import
 ```
+
+**Word and PDF files:**
+
+- **Word (.docx)** keeps its structure: headings, bullet lists and tables come through as in the document. Pictures are left out. The old `.doc` format can't be read: open it in Word and save it as `.docx` (**File > Save As**).
+- **PDF** keeps only the text, so check the result more carefully: the order of entries (a two-column layout can come out mixed up) and that each bullet is whole. A scanned PDF has no text to read and is refused; so are password-protected files. If a PDF reads poorly, export the resume from the program you wrote it in as `.docx`, HTML or text instead.
+- Files up to 10 MB, PDFs up to 20 pages. Word and PDF files must be saved in your intake folder: they can't be piped in or given as a link.
 
 What to expect:
 
@@ -939,7 +945,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb update-drafts` / `confirm-update <n>` / `discard-update <n>`               | Changes to job fields proposed by the agent         |
 | `rb archive-job <job-id> [--restore]`                                              | Archive an application                              |
 | `rb orgs` / `add-company` / `add-department` / `rename-org` / `merge-orgs` | Companies and departments                           |
-| `rb import-resume intake/<file>\|<link> [--format --yes]` / `--stdin`              | Import an existing resume as draft library items    |
+| `rb import-resume intake/<file>\|<link> [--format --yes]` / `--stdin`              | Import an existing resume (Word, PDF, HTML, Markdown, text) as drafts |
 | `rb confirm <id>`                                                                  | Confirm a draft library item                        |
 | `rb confirm --all [--yes]`                                                         | Confirm every draft, after listing them and asking  |
 | `rb brief <job-id>`                                                                | The agent brief                                     |

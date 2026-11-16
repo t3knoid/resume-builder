@@ -131,7 +131,8 @@ def _short(text: str, n: int = 90) -> str:
 
 def import_resume(space: UserSpace, ctx: RequestContext, text: str, fmt: str = "auto", name: str | None = None,
                   dry_run: bool = True, source: str | None = None, notes: list[str] | None = None,
-                  expect_hash: str | None = None) -> dict:
+                  expect_hash: str | None = None, source_format: str | None = None) -> dict:
+    """`source_format` names the original format when the text was converted from it (docx, pdf: issue #39)."""
     digest = content_hash(text)
     if expect_hash and expect_hash != digest:
         raise Conflict("The resume changed since the preview, so nothing was imported. Run the import again to see "
@@ -299,6 +300,12 @@ def import_resume(space: UserSpace, ctx: RequestContext, text: str, fmt: str = "
 
     # What the user should know
     attention += notes or []
+    if source_format == "pdf":
+        attention.append("Read from a PDF, which keeps only the text: check the order of entries and that each bullet "
+                         "is whole, especially if your resume has two columns.")
+        if not parsed.roles and not parsed.summary:
+            attention.append("Little was recognized in this PDF (no roles or summary). If it has two columns or unusual "
+                             "headings, save it from the original as .docx, HTML or text and import that instead.")
     if parsed.contact_dropped:
         attention.append("Contact details (email, phone) were left out: they never go in base.yaml. They come from the "
                          "secrets named in user.yaml (see the user manual, contact details).")
@@ -328,7 +335,7 @@ def import_resume(space: UserSpace, ctx: RequestContext, text: str, fmt: str = "
     return {
         "dry_run": dry_run,
         "applied": applied,
-        "format": resume_import.detect_format(text, name) if fmt == "auto" else fmt,
+        "format": source_format or (resume_import.detect_format(text, name) if fmt == "auto" else fmt),
         "source": source,
         "content_hash": digest,
         "counts": counts,

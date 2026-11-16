@@ -518,11 +518,11 @@ def build_parser() -> argparse.ArgumentParser:
     im = cmd("import-resume", "Import an existing resume (HTML, Markdown or plain text) as draft content library entries. "
                               "Shows what it found and asks before adding anything.")
     im.add_argument("file", nargs="?", metavar="intake/NAME or LINK",
-                    help="your resume saved in your intake folder (e.g. intake/resume.html), or a link to it "
+                    help="your resume saved in your intake folder (e.g. intake/resume.docx, .pdf, .html, .md, .txt), or a link to it "
                          "(your resume page, a Markdown or text file, a public Google Doc): fetched once")
     im.add_argument("--stdin", action="store_true", help="read the resume from stdin instead of a file")
-    im.add_argument("--format", default="auto", choices=["auto", "html", "markdown", "text"],
-                    help="the resume's format (default: detect it)")
+    im.add_argument("--format", default="auto", choices=["auto", "html", "markdown", "text", "docx", "pdf"],
+                    help="the resume's format (default: detect it). Word and PDF only from a file in your intake folder")
     im.add_argument("--yes", "-y", action="store_true", help="add the drafts without asking")
     ap = cmd("approve", "Approve a cover letter or answer.")
     ap.add_argument("job_id")
@@ -855,6 +855,9 @@ def import_resume_cmd(op, args, ask=input) -> int:
     if bool(args.file) == bool(args.stdin):
         raise AppError("Give the resume's file in your intake folder (`rb import-resume intake/resume.html`), "
                        "a link to it, or --stdin.")
+    if args.stdin and args.format in ("docx", "pdf"):
+        raise AppError("Word and PDF files can't be piped in. Save the file in your intake folder and run "
+                       "`rb import-resume intake/<file>`.")
     if args.stdin:
         text = sys.stdin.read().lstrip("﻿")
         if not text.strip():

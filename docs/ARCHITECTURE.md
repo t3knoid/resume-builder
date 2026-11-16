@@ -190,7 +190,7 @@ It also has `transaction()`, `migrate()`, `dump()`, `load()` and `destroy()` (cl
 
 ### 4. Input adapters and change notifications (`changes.py`, `sync.py`, `sync_ops.py`)
 
-The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`, and `job_intake_preview_file` and `library_import_file`, which read a file the user saved in their intake folder and hand its text to the service) and the bootstrap.
+The YAML and Markdown files in a user's folder are an input adapter over the services. `sync.py` validates changed files and applies them to storage. `sync_ops.py` holds the file-facing operations (`space_init`, `space_delete`, `sync`, `resolve`, `export_files`, `profile_propose_text`, and `job_intake_preview_file` and `library_import_file`, which read a file the user saved in their intake folder and hand its text to the service; `library_import_file` first converts a Word or PDF file to text with `resume_readers.py`, within size limits, and extracts a PDF in a child process with a time limit) and the bootstrap.
 
 Services never write those files. After a write they call `space.changed(kind, key)`, and every change listener on the App receives a `Change`. Locally that listener is `sync_ops.write_back`, which updates the working copy and keeps comments. A host without user files passes `change_listeners=[]`, or its own listeners.
 

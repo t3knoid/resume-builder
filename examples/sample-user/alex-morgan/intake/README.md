@@ -10,4 +10,4 @@ The app reads a file here only when you run that command. It never changes, move
 
 ## Your existing resume
 
-You can also start your content library from a resume you already have. Save it here as HTML, Markdown or plain text (for a PDF or Word file, save or export it as text or HTML first), for example `intake/resume.html`, and run `rb import-resume intake/resume.html`. It shows what it found and asks once; everything is added to `base.yaml` as drafts, in your own words, for you to check and confirm. You can delete the file afterwards.
+You can also start your content library from a resume you already have. Save it here as a Word document (.docx), a PDF, HTML, Markdown or plain text, for example `intake/resume.docx`, and run `rb import-resume intake/resume.docx`. For the old `.doc` format, save it as `.docx` first; a scanned PDF can't be read. It shows what it found and asks once; everything is added to `base.yaml` as drafts, in your own words, for you to check and confirm. You can delete the file afterwards.

@@ -17,6 +17,8 @@ dependencies = [
   "ruamel.yaml==0.18.10",
   "python-multipart==0.0.20",
   "markdown-it-py==3.0.0",
+  "mammoth==1.13.0",           # Word (.docx) resumes to HTML for import (issue #39, D39)
+  "pdfminer.six==20260107",    # PDF resumes' text layer for import (issue #39, D39)
 ]
 
 [project.optional-dependencies]
