@@ -517,8 +517,10 @@ To confirm everything at once, run `rb confirm --all`. It lists every draft bull
 One command starts every job: `rb new-job`. Give it the posting's link and it reads the posting for you:
 
 ```sh
-rb new-job https://careers.example.com/jobs/1234
+rb new-job "https://careers.example.com/jobs/1234?team=platform&ref=board"
 ```
+
+Put the link in quotes. Links often contain `&` or `?`, which PowerShell and macOS/Linux shells treat as part of the command (PowerShell stops with "The ampersand (&) character is not allowed"). The quotes work in every shell. The **Commands** page on the website adds them for you.
 
 It fetches the page once, keeps a copy of the posting exactly as published, and fills in what the posting states: title, link, source, posting id, location, remote/hybrid/onsite, salary range as posted, date posted and closing date. It shows you a preview first:
 
@@ -545,12 +547,12 @@ Values you type yourself (`--set`, `--title`, or a field you change in the revie
 Options (`rb new-job --help`):
 
 ```sh
-rb new-job <url> --company northwind-labs --department platform-engineering   # choose them up front
-rb new-job <url> --company "Fabrikam" --create                                  # add a new company
-rb new-job <url> --title "Platform Engineer II"                                 # your own title instead of the posting's
-rb new-job <url> --set work_arrangement=hybrid --set salary_range=              # your own value; empty clears one
-rb new-job <url> --set interest_notes="I want to build tools other teams use"   # why you want it, in your words
-rb new-job <url> --yes                                                          # accept the preview without asking
+rb new-job "<url>" --company northwind-labs --department platform-engineering   # choose them up front
+rb new-job "<url>" --company "Fabrikam" --create                                  # add a new company
+rb new-job "<url>" --title "Platform Engineer II"                                 # your own title instead of the posting's
+rb new-job "<url>" --set work_arrangement=hybrid --set salary_range=              # your own value; empty clears one
+rb new-job "<url>" --set interest_notes="I want to build tools other teams use"   # why you want it, in your words
+rb new-job "<url>" --yes                                                          # accept the preview without asking
 ```
 
 `--url <url>` works the same as giving the link on its own.
@@ -1015,6 +1017,7 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | "That token isn't valid"                          | It was replaced. Issue a new one: `rb token --actor agent`.                                                           |
 | "This address isn't allowed" in the browser       | Open the tracker as `http://localhost:8000` (or your `RB_HOST_PORT`). To use another name for this computer, add it to `RB_WEB_HOSTS` in `.env`, then `docker compose up -d`. |
 | A job folder disappeared                          | Nothing was deleted: `rb export-files`.                                                                               |
+| PowerShell says "The ampersand (&) character is not allowed", or a macOS/Linux shell runs part of the link as a separate command | The link has `&` in it. Put it in quotes: `rb new-job "<link>"`. |
 | `rb new-job <url>` says the page needs a sign-in or JavaScript, or has too little text | Copy the posting from your browser into `intake/<name>.txt`, then `rb new-job --file intake/<name>.txt <link>`. |
 | `rb new-job <url>` says "already tracking this posting" | Use `--recapture <job-id>` to update that job's posting, or `--allow-duplicate` for a separate job.                    |
 | Something else                                    | `docker compose logs app`, then `rb doctor`.                                                                        |

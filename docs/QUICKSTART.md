@@ -59,8 +59,10 @@ The PDF lands in `output/<your-name>/public/`.
 ## 4. Add a job
 
 ```sh
-rb new-job https://careers.example.com/jobs/1234
+rb new-job "https://careers.example.com/jobs/1234?team=platform&ref=board"
 ```
+
+Put the link in quotes. Links often contain `&` or `?`, which PowerShell and macOS/Linux shells treat as part of the command (PowerShell stops with "The ampersand (&) character is not allowed"). The quotes work in every shell.
 
 It reads the posting from the link, shows what it found (title, location, salary, dates and so on) and the company it matched, and asks once before creating `data/<your-name>/jobs/<job-id>/` with `posting.md` and `application.yaml` filled in. If the site needs a sign-in, copy the posting into a file in `data/<your-name>/intake/` and run `rb new-job --file intake/<name>.txt <link>` instead. Then save why you want the job, in your own words: `rb set <job-id> --interest-notes "..."` (or write it under `interest_notes` in `application.yaml`). Letters use only these notes for motivation.
 
