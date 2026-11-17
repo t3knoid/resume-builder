@@ -162,6 +162,17 @@ def test_commands_page(client):
     assert client.get(f"/u/{USER}/commands?job=2026-01-01-nobody").status_code == 404
 
 
+def test_commands_page_renders_the_other_templates(client, sample, owner):
+    page = client.get(f"/u/{USER}/commands?job={JOB}").text
+    assert f"rb render {JOB} --template modern" in page and f"rb render {JOB} --template traditional" in page
+    assert "--template classic" not in page                      # the default needs no option
+    settings = sample.user_settings.model_dump(mode="json")
+    settings["template"] = "modern"
+    invoke(sample.app, owner, "settings_replace", {"settings": settings})
+    page = client.get(f"/u/{USER}/commands?job={JOB}").text
+    assert "--template classic" in page and "--template traditional" in page and "--template modern" not in page
+
+
 def test_job_page_shows_next_steps(client):
     page = client.get(f"/u/{USER}/jobs/{JOB}").text
     assert "Next steps" in page and f"/u/{USER}/commands?job={JOB}" in page

@@ -408,8 +408,10 @@ def _website(api: FastAPI, app: App) -> None:
         resumes = [r for r in resumes if not r["preview"]]
         letter = next((d["approved_snapshot"] for d in (run(user, "document_list", {"job_id": job}) if job else [])
                        if d["kind"] == "cover_letter" and d["status"] == "approved"), None)
+        templates = run(user, "templates_list")
+        others = [t["name"] for t in templates["templates"] if t["name"] != templates["default"]["template"]]
         groups = [{"title": g["title"], "commands": shown(g["commands"], user)}
-                  for g in rbcmd.catalog(job, resumes[-1]["id"] if resumes else None, letter)]
+                  for g in rbcmd.catalog(job, resumes[-1]["id"] if resumes else None, letter, others)]
         return page(request, "commands.html", user=user, jobs=jobs, job=job, groups=groups,
                     steps=next_steps(user, job) if job else [], user_flag=user_flag(user))
 
