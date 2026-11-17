@@ -536,6 +536,9 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--preview", action="store_true", help="include drafts, watermarked")
     rd.add_argument("--ats", action="store_true", help="plain single-column variant")
     rd.add_argument("--format", default="pdf", choices=["pdf", "html", "txt", "none"])
+    rd.add_argument("--template", help="design for this render only (see `rb templates`); default: user.yaml")
+    rd.add_argument("--template-version", type=int, help="with --template: its version (default: the newest)")
+    cmd("templates", "List the resume templates you can choose from.")
     rg = cmd("regenerate", "Rebuild a document exactly from a snapshot.")
     rg.add_argument("snapshot_id", nargs="?")
     rg.add_argument("--job")
@@ -795,7 +798,10 @@ def _run(app: App, args) -> int | None:
         _print(op("document_approve", {"job_id": args.job_id, "kind": args.kind, "slug": args.slug}))
     elif c == "render":
         _print(op("render", {"job_key": args.job_key, "doc_type": args.type, "slug": args.slug, "preview": args.preview,
-                             "variant": "ats" if args.ats else "styled", "export": None if args.format == "none" else args.format}))
+                             "variant": "ats" if args.ats else "styled", "export": None if args.format == "none" else args.format,
+                             "template": args.template, "template_version": args.template_version}))
+    elif c == "templates":
+        _print(op("templates_list", {}))
     elif c == "regenerate":
         _print(op("regenerate", {"snapshot_id": args.snapshot_id, "job_key": args.job, "doc_type": args.type,
                                  "as_of": args.as_of, "format": args.format}))

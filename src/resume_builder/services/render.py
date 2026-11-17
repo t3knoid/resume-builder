@@ -62,6 +62,64 @@ def template_roots(space: UserSpace) -> list[Path]:
     return [*space.app.extensions.document_template_dirs, space.app.settings.templates_dir]
 
 
+LETTER_TYPES = ("cover_letter", "answer", "fit_report")
+DEFAULT_TEMPLATE = "classic"  # the letter design used when a resume template has no letter design of its own
+
+
+def family_of(doc_type: str) -> str:
+    return "letter" if doc_type in LETTER_TYPES else "resume"
+
+
+def available_templates(space: UserSpace, family: str = "resume") -> dict[str, list[int]]:
+    """Installed templates of a family (packaged and the App's extra roots): name -> versions, sorted."""
+    found: dict[str, set[int]] = {}
+    for root in template_roots(space):
+        base = root / family
+        if not base.is_dir():
+            continue
+        for t in base.iterdir():
+            versions = {int(v.name) for v in t.iterdir() if v.is_dir() and v.name.isdigit()} if t.is_dir() else set()
+            if versions:
+                found.setdefault(t.name, set()).update(versions)
+    return {name: sorted(v) for name, v in sorted(found.items())}
+
+
+def template_problems(space: UserSpace, name: str, version: int | None, file: str = "user.yaml",
+                      field: str = "template") -> list[Problem]:
+    """A resume template name (and version) that isn't installed, explained with the choices (issue #16)."""
+    choices = available_templates(space, "resume")
+    listed = ", ".join(f"{n} (versions {', '.join(map(str, v))})" for n, v in choices.items())
+    if name not in choices:
+        return [Problem(f"There's no resume template `{name}`. Installed: {listed}.", file=file, field=field,
+                        example=DEFAULT_TEMPLATE)]
+    if version is not None and version not in choices[name]:
+        return [Problem(f"Template `{name}` has no version {version}. Its versions: {', '.join(map(str, choices[name]))} "
+                        "(or null for the newest).", file=file, field=f"{field}_version", example="null")]
+    return []
+
+
+def choose_template(space: UserSpace, doc_type: str, name: str | None = None,
+                    version: int | None = None) -> tuple[str, int]:
+    """The template (name, version) a new document uses.
+
+    Without a name, the user's `template` and `template_version` from user.yaml; with a name (a
+    per-render choice), that template at `version`, or its newest. The version pins the resume
+    design. A letter, answer or fit report uses the letter design of the same name, newest version,
+    or `classic` when that template has no letter design.
+    """
+    s = space.user_settings
+    if name is None:
+        name, version = s.template, s.template_version
+    problems = template_problems(space, name, version, field="template")
+    if problems:
+        raise ValidationFailed(problems[0].message, problems)
+    if family_of(doc_type) == "letter":
+        name = name if name in available_templates(space, "letter") else DEFAULT_TEMPLATE
+        version = None
+    _, v = template_dir(space, family_of(doc_type), name, version)
+    return name, v
+
+
 def template_dir(space: UserSpace, family: str, name: str, version: int | None) -> tuple[Path, int]:
     """The folder of `<family>/<name>/<version>`, looking in the extra roots before the package.
 
@@ -85,7 +143,7 @@ def template_dir(space: UserSpace, family: str, name: str, version: int | None) 
             found.setdefault(v, p)
     versions = sorted(found)
     if not versions:
-        raise NotFound(f"No `{name}` template for {family}.")
+        raise NotFound(f"No `{name}` template for {family}. Installed: {', '.join(available_templates(space, family)) or 'none'}.")
     v = version or versions[-1]
     if v not in found:
         raise NotFound(f"Template `{name}` has no version {v}. Available: {versions}.")
@@ -221,11 +279,11 @@ def _hash(obj) -> str:
 
 
 def build_content(space: UserSpace, job_key: str, doc_type: str, slug: str = "", preview: bool = False,
-                  variant: str = "styled") -> tuple[dict, list[str]]:
+                  variant: str = "styled", template: str | None = None,
+                  template_version: int | None = None) -> tuple[dict, list[str]]:
     s = space.user_settings
     lib = space.repo.load_library()
-    _, tversion = template_dir(space, "letter" if doc_type in ("cover_letter", "answer", "fit_report") else "resume",
-                               s.template, s.template_version)
+    tname, tversion = choose_template(space, doc_type, template, template_version)
     contact, _ = contact_values(space, s)
     content: dict = {
         "schema": SNAPSHOT_SCHEMA,
@@ -233,7 +291,7 @@ def build_content(space: UserSpace, job_key: str, doc_type: str, slug: str = "",
         "job_key": job_key,
         "preview": preview,
         "variant": variant,
-        "template": {"name": s.template, "version": tversion},
+        "template": {"name": tname, "version": tversion},
         "settings": {"page_size": "Letter"},
         "person": _person(s),
         "contact": {"secrets": [n for n in (s.contact.email_secret, s.contact.phone_secret) if n],
@@ -295,8 +353,9 @@ def canonical(content: dict) -> str:
 
 
 def create_snapshot(space: UserSpace, ctx: RequestContext, job_key: str, doc_type: str, slug: str = "",
-                    reason: str = "draft", preview: bool = False, variant: str = "styled") -> str:
-    content, bullet_ids = build_content(space, job_key, doc_type, slug, preview, variant)
+                    reason: str = "draft", preview: bool = False, variant: str = "styled",
+                    template: str | None = None, template_version: int | None = None) -> str:
+    content, bullet_ids = build_content(space, job_key, doc_type, slug, preview, variant, template, template_version)
     data = canonical(content)
     sid = "sn-" + hashlib.sha256(data.encode()).hexdigest()[:20]
     existing = space.repo.get_snapshot(sid)
@@ -333,7 +392,7 @@ def render_html(space: UserSpace, content: dict, meta: dict) -> tuple[str, list[
     if content.get("image_digest") != space.app.settings.image_digest:
         warnings.append(f"Created with image {content.get('image_digest')}; this is {space.app.settings.image_digest}. "
                         "Text and template are identical, but layout may shift slightly.")
-    family = "letter" if content["doc_type"] in ("cover_letter", "answer", "fit_report") else "resume"
+    family = family_of(content["doc_type"])
     tdir, _ = template_dir(space, family, content["template"]["name"], content["template"]["version"])
     env = _env(tdir)
     tpl = env.get_template("document.html.j2")
@@ -409,12 +468,18 @@ class RenderIn(BaseModel):
     preview: bool = Field(False, description="Include draft content, watermarked (R2.3)")
     variant: str = Field("styled", pattern="^(styled|ats)$")
     export: str | None = Field("pdf", pattern="^(pdf|html|txt)$", description="Also export a file to /output; null for none")
+    template: str | None = Field(None, description="Template for this render only (see `templates_list`); null = the one in user.yaml")
+    template_version: int | None = Field(None, ge=1, description="With `template`: its version; null = the newest")
 
 
 @operation("render", "resume:render", RenderIn, "Snapshot a document and (optionally) export it to /output.", writes=True)
 def render_op(space: UserSpace, ctx: RequestContext, data: RenderIn) -> dict:
     slug = (data.slug or "why-here") if data.doc_type == "answer" else ""
-    sid = create_snapshot(space, ctx, data.job_key, data.doc_type, slug=slug, preview=data.preview, variant=data.variant)
+    if data.template_version is not None and data.template is None:
+        raise ValidationFailed("Give `template` with `template_version` (to change the default version, set "
+                               "`template_version` in user.yaml).")
+    sid = create_snapshot(space, ctx, data.job_key, data.doc_type, slug=slug, preview=data.preview, variant=data.variant,
+                          template=data.template, template_version=data.template_version)
     out = {"snapshot_id": sid}
     if data.export:
         path, warnings = export(space, sid, data.export)
@@ -444,6 +509,18 @@ def regenerate(space: UserSpace, ctx: RequestContext, data: RegenIn) -> dict:
 
 class Empty(BaseModel):
     pass
+
+
+@operation("templates_list", "content:read", Empty,
+           "The installed resume templates and their versions, and the one user.yaml picks (issue #16).")
+def templates_list(space: UserSpace, ctx: RequestContext, data: Empty) -> dict:
+    s = space.user_settings
+    resume, letter = available_templates(space, "resume"), available_templates(space, "letter")
+    return {
+        "templates": [{"name": n, "versions": v, "newest": v[-1],
+                       "letter_template": n if n in letter else DEFAULT_TEMPLATE} for n, v in resume.items()],
+        "default": {"template": s.template, "template_version": s.template_version},
+    }
 
 
 @operation("publish_public", "site:publish", Empty, "Render the public profile as a static site in /output/<user>/public/.", writes=True)

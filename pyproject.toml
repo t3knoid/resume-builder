@@ -32,7 +32,7 @@ rb = "resume_builder.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-resume_builder = ["web/templates/*.html", "web/static/*", "templates/**/*", "migrations/*.sql", "help/*.md"]
+resume_builder = ["web/templates/*.html", "web/static/*", "templates/**/*", "migrations/*.sql", "help/*.md", "help/images/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -261,7 +261,7 @@ Each user space has two `FileStore`s: `space.output` (exported PDFs and HTML and
 ### 7. Templates
 
 - **Website:** Jinja uses a `ChoiceLoader` that checks the App's template folders (from `template_dirs` and `ext.add_template_dir`) before the packaged `web/templates`. A host can replace `base.html` or any page.
-- **Documents:** a resume or letter template is a folder `<family>/<name>/<version>/` with `document.html.j2` and `style.css`. Extra roots (`document_template_dirs`, `ext.add_document_templates`) can add new templates or versions. They cannot replace a version that ships in the package: snapshots must regenerate byte for byte, so released versions never change.
+- **Documents:** a resume or letter template is a folder `<family>/<name>/<version>/` with `document.html.j2` and `style.css`. Extra roots (`document_template_dirs`, `ext.add_document_templates`) can add new templates or versions. They cannot replace a version that ships in the package: snapshots must regenerate byte for byte, so released versions never change. Templates from every root are what `templates_list` lists and what `user.yaml`'s `template` and a render's `template` are checked against (`available_templates()` in `services/render.py`). A letter, answer or fit report uses `letter/<name>` when that template has one, and `letter/classic` otherwise.
 
 ### 8. Routers
 

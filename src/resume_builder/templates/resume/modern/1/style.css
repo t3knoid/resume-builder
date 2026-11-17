@@ -1,0 +1,59 @@
+/* resume/modern v1. Released: never edit; add a new version instead.
+   Styled variant: sans-serif (Liberation Sans, Arial's metric twin, then DejaVu Sans), slate text,
+   teal name, section rules and company names, dates right-aligned beside each position.
+   ATS variant: plain single column, black text, full URLs. Only fonts installed in the image (DK2). */
+@page { size: Letter; margin: 0.55in 0.7in; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Liberation Sans", Arial, "DejaVu Sans", sans-serif; font-size: 10pt; line-height: 1.35; color: #24292f; }
+a { color: inherit; text-decoration: none; }
+
+.contact { margin-bottom: 4pt; }
+.contact .name { font-size: 22pt; font-weight: 700; color: #136f75; margin: 0; letter-spacing: 0.3pt; }
+.contact .headline { font-size: 11pt; font-weight: 700; color: #24292f; margin: 1pt 0 2pt; }
+.contact .contact-line { font-size: 9pt; color: #57606a; margin: 0; }
+.contact .contact-line > span { white-space: nowrap; }
+.contact .contact-line .sep { color: #136f75; }
+
+.resume h2 { font-size: 10.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2pt; color: #136f75;
+             border-bottom: 1.2pt solid #136f75; padding-bottom: 1pt; margin: 11pt 0 5pt; }
+.resume p { margin: 0 0 3pt; }
+.resume .summary { margin: 0; }
+.resume ul { margin: 2pt 0 0; padding-left: 13pt; }
+.resume ul li { margin-bottom: 1.5pt; }
+.resume ul li::marker { color: #136f75; }
+.resume ul ul { margin-top: 1pt; }
+.resume strong { font-weight: 700; color: #1b1f24; }
+.resume .item { margin-bottom: 7pt; }
+.resume .item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10pt; }
+.resume .position { font-size: 10.5pt; font-weight: 700; margin: 0; }
+.resume .item-head .dates { font-size: 9pt; color: #57606a; }
+.resume .org { font-size: 9.5pt; margin: 0 0 1pt; }
+.resume .company { font-weight: 700; color: #136f75; }
+.resume .place, .resume .official { color: #57606a; }
+.resume .official { font-style: italic; }
+.resume .description { font-style: italic; color: #57606a; font-size: 9.5pt; }
+.resume ul.skills { list-style: none; padding-left: 0; }
+.dates { white-space: nowrap; }
+.watermark { position: fixed; top: 40%; left: 0; right: 0; text-align: center; font-size: 34pt; color: rgba(200, 0, 0, 0.16); transform: rotate(-24deg); }
+
+/* ATS variant: the plain layout parsers read in order. */
+body.ats { font-family: "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.3; color: #000; }
+body.ats .contact .name { font-size: 18pt; color: #000; letter-spacing: 0; margin: 0 0 2pt; }
+body.ats .contact .headline, body.ats .contact .contact-line { font-size: inherit; font-weight: 400; color: #000; margin: 0; }
+body.ats .contact .contact-line .sep { color: #000; }
+body.ats .contact .contact-line > span { white-space: normal; }
+body.ats h2 { font-size: 12pt; color: #000; letter-spacing: 0; border-bottom: 1px solid #000; margin: 12pt 0 4pt; }
+body.ats h3 { font-size: 11pt; margin: 8pt 0 0; }
+body.ats p { margin: 0 0 2pt; }
+body.ats ul { margin: 2pt 0 4pt; padding-left: 16pt; list-style: none; }
+body.ats ul ul { margin: 2pt 0 0; padding-left: 12pt; }
+/* Inline bullet (not a list marker) so text extraction keeps it beside its item. */
+body.ats li { margin-bottom: 2pt; text-indent: -9pt; padding: 0; }
+body.ats li::before { content: "\2022\00a0\00a0"; }
+body.ats .resume .description { font-style: normal; color: #000; font-size: inherit; }
+
+/* Public site on screens. */
+@media screen {
+  body.site main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+  body.site { font-size: 15px; }
+}

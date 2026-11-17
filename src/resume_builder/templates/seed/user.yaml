@@ -11,7 +11,7 @@ headline: null                         # One line under your name, e.g. "Infrast
 location: null                         # City, State. e.g. "Austin, TX". null = leave it off.
 links: []                              # e.g. [{label: GitHub, url: https://github.com/you}]
 timezone: {{timezone}}                 # Used for dates and job ids. e.g. America/New_York
-template: classic                      # Document design. Available: classic
+template: classic                      # Resume design: classic, modern or traditional (`rb templates` lists them). e.g. modern
 template_version: null                 # null = newest. Old documents always keep the version they used.
 
 contact:                               # Your email and phone are NOT stored here or anywhere in your data.

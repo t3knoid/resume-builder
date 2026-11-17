@@ -721,6 +721,8 @@ rb render <job-id> --type cover_letter
 rb render <job-id> --type answer --format txt
 rb render public --preview                 # includes drafts, stamped "PREVIEW"
 rb render <job-id> --format html           # or none (snapshot only)
+rb render <job-id> --template modern       # another design for this render only
+rb templates                               # the designs you can choose from
 ```
 
 Each render saves a **snapshot**: the exact text of every section, which bullets were used, the design (template) version, the app version and when it was made. Your email and phone are *not* in it; they're added when the PDF is built, and you're told if they've changed since.
@@ -742,7 +744,18 @@ rb delete-snapshot <snapshot-id> [--confirm]
 
 PDFs are exported to `output/<you>/<job-id>/`. Nothing there is kept by the app.
 
-**Design.** The `classic` template's version 2 (the default) has two looks. The normal render is a styled print layout: name and company names in blue, positions in capitals, official titles and company descriptions in italics, bold where your bullets use `**`. The `--ats` render is plain black, single column, with underlined section headings and bullet characters kept in the text, so applicant-tracking systems read it in order. Both print your links as visible addresses (`github.com/you` in the styled version, the full URL in the ATS version), so they survive printing. Sections come in this order: Professional Summary, Work Experience, Core Skills, projects (a single project's name becomes the section heading), Education, Certifications. To keep the older layout, set `template_version: 1` in `user.yaml`; documents keep the version they were made with either way.
+**Designs.** Three resume templates are installed. `template` in `user.yaml` picks the one used by default (`classic` unless you change it), and `--template <name>` picks another for one render. Every template has a normal (styled) look and an `--ats` look: plain, single column, full URLs and bullet characters kept in the text, so applicant-tracking systems read it in order. The snapshot records the template and version, so a document always rebuilds in the design it was made with. A misspelled name stops `user.yaml` from syncing, with the list of installed templates in the message.
+
+| `classic` | `modern` | `traditional` |
+|---|---|---|
+| ![The classic template: blue name and company names, positions in capitals, sans-serif](images/templates/classic.png) | ![The modern template: teal name, section rules and company names, dates right-aligned, sans-serif](images/templates/modern.png) | ![The traditional template: serif, black, centered header, small-caps section headings](images/templates/traditional.png) |
+
+- **`modern`:** sans-serif (Liberation Sans) with teal accents. Each position has its dates right-aligned on the same line, then the company, place and official title on the next.
+- **`traditional`:** serif (Liberation Serif) in black, with a centered header and small-caps section headings. The company and place come first, then the position in italics with its dates on the right.
+
+The previews use the fictional example user. The ATS versions are `classic-ats.png`, `modern-ats.png` and `traditional-ats.png` in `docs/images/templates/`. Cover letters and answers use the `classic` letter design with every template. `template_version` pins only the resume design's version; leave it `null` to get each template's newest.
+
+**The `classic` design.** Version 3 (the newest) has two looks. The normal render is a styled print layout: name and company names in blue, positions in capitals, official titles and company descriptions in italics, bold where your bullets use `**`. The `--ats` render is plain black, single column, with underlined section headings and bullet characters kept in the text, so applicant-tracking systems read it in order. Both print your links as visible addresses (`github.com/you` in the styled version, the full URL in the ATS version), so they survive printing. Sections come in this order: Professional Summary, Work Experience, Core Skills, projects (a single project's name becomes the section heading), Education, Certifications. The header is compact: your name, your headline, then your location, email, phone and links on one line separated by `|` (it wraps between items when it doesn't fit). Version 2 is the same layout with each of those on its own line. To keep an older layout, set `template_version: 2` (or `1`) in `user.yaml`; documents keep the version they were made with either way.
 
 ## 11. Recording what you sent
 
@@ -958,7 +971,8 @@ Then ask it to redo the work, for example: "Update the profile and fit report fo
 | `rb confirm <id>`                                                                  | Confirm a draft library item                        |
 | `rb confirm --all [--yes]`                                                         | Confirm every draft, after listing them and asking  |
 | `rb brief <job-id>`                                                                | The agent brief                                     |
-| `rb render <job-id\|public> [--type --preview --ats --format]`                      | Snapshot and export a document                      |
+| `rb render <job-id\|public> [--type --preview --ats --format --template]`           | Snapshot and export a document                      |
+| `rb templates`                                                                     | The resume designs you can choose from              |
 | `rb approve <job-id> cover_letter\|answer [--slug]`                                 | Approve a letter or answer                          |
 | `rb snapshots [<job-id>] [--type]`                                                 | List snapshots                                      |
 | `rb regenerate <id>` or `--job --type --as-of`                                   | Rebuild a document exactly                          |

@@ -281,6 +281,13 @@ def _website(api: FastAPI, app: App) -> None:
     def help_search(request: Request, q: str = ""):
         return page(request, "help_search.html", guides=helpdocs.GUIDES, q=q, hits=helpdocs.search(q[:200]))
 
+    @api.get("/help/images/{name:path}", include_in_schema=False)
+    def help_image(name: str):
+        path = helpdocs.help_image(name)
+        if path is None:
+            raise HTTPException(404, "No such picture.")
+        return Response(path.read_bytes(), media_type="image/png", headers={"Cache-Control": "max-age=3600"})
+
     @api.get("/help/{slug}", response_class=HTMLResponse, include_in_schema=False)
     def help_page(request: Request, slug: str):
         rendered = helpdocs.render_guide(slug)

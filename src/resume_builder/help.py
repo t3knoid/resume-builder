@@ -47,6 +47,21 @@ def guides_dir() -> Path | None:
     return None
 
 
+_IMAGE_NAME = re.compile(r"^[a-z0-9-]+(?:/[a-z0-9-]+)*\.png$")
+
+
+def help_image(name: str) -> Path | None:
+    """A picture the guides show (`docs/images/...`, packaged as `help/images/...`), or None.
+
+    Only lower-case PNG names inside the images folder, so the route can't reach any other file.
+    """
+    folder = guides_dir()
+    if folder is None or not _IMAGE_NAME.match(name):
+        return None
+    path = folder / "images" / name
+    return path if path.is_file() else None
+
+
 def heading_slug(text: str, seen: dict[str, int]) -> str:
     """GitHub's anchor for a heading: lower case, punctuation removed, spaces to hyphens, and a
     -1, -2, ... suffix for repeats. Links written for GitHub therefore work in help too."""
@@ -108,6 +123,10 @@ def render_markdown(text: str, source: str = "") -> tuple[str, list[tuple[int, s
             toc.append((int(tok.tag[1]), label, anchor))
         elif tok.type == "inline":
             for child in tok.children or []:
+                if child.type == "image":  # pictures next to the guides are served by the help route
+                    src = str(child.attrGet("src") or "")
+                    if src.startswith("images/"):
+                        child.attrSet("src", "/help/" + src)
                 if child.type == "link_open":
                     href, external = _rewrite(str(child.attrGet("href") or ""), source)
                     child.attrSet("href", href)

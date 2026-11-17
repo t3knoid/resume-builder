@@ -37,6 +37,9 @@ class SettingsReplaceIn(BaseModel):
 @operation("settings_replace", "settings:write", SettingsReplaceIn,
            "Replace the user's settings (user.yaml) as a whole.", writes=True)
 def settings_replace(space: UserSpace, ctx: RequestContext, data: SettingsReplaceIn) -> dict:
+    from .render import template_problems
+    s = data.settings
+    _errors_or_warnings(template_problems(space, s.template, s.template_version), "user.yaml has problems.")
     with space.repo.transaction():
         space.repo.put_settings(data.settings, ctx.actor)
     return {"saved": "settings", "file_updated": space.changed("settings")}

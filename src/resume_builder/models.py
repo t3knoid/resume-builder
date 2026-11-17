@@ -103,7 +103,7 @@ class UserSettings(Strict):
     location: ShortText | None = None
     links: list[Link] = Field(default_factory=list)
     timezone: ShortText = "UTC"
-    template: Slug = "classic"
+    template: Slug = Field("classic", description="Resume design: classic, modern or traditional (`rb templates` lists the installed ones)")
     template_version: int | None = Field(None, description="null = newest version of the template")
     contact: ContactSecrets = Field(default_factory=ContactSecrets)
     tracker: TrackerSettings = Field(default_factory=TrackerSettings)

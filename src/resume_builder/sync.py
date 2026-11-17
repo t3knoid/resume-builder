@@ -437,6 +437,9 @@ def _rules(space: UserSpace, kind: str, key: str | None, model: BaseModel, rel: 
         return problems + validate_profile(model, lib, rel, space.repo.archived_ids())
     if kind == "application":
         return validate_application(model, space.repo.load_registry(), rel)
+    if kind == "settings":
+        from .services.render import template_problems
+        return template_problems(space, model.template, model.template_version, rel)
     return []
 
 

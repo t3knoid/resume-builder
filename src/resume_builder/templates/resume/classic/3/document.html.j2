@@ -1,0 +1,145 @@
+<!doctype html>
+{#- Released template: resume/classic v3. Never edit after release; add a new version folder instead (PRD R12.7). -#}
+{#- v3: the same as v2 with a compact header: location, email, phone and links share one line (wrapping between items). -#}
+{#- Two variants from one snapshot: "styled" (print layout) and "ats" (plain, single column, full URLs). -#}
+{%- set ats = c.variant == 'ats' -%}
+{%- set site = c.doc_type == 'public_site' -%}
+{%- macro dates(start, end) -%}
+{%- if start %}<span class="dates"><time datetime="{{ start }}">{{ start | month_year }}</time> – <time{% if end != 'present' %} datetime="{{ end }}"{% endif %}>{{ (end or 'present') | month_year }}</time></span>{% endif -%}
+{%- endmacro -%}
+{%- macro bullet(b) -%}
+{%- if ats %}{{ b.text }}{% else %}{{ b.parts | emphasis }}{% endif -%}
+{%- endmacro -%}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ c.person.name }}{% if c.person.headline %} | {{ c.person.headline }}{% endif %}</title>
+<meta name="author" content="{{ c.person.name }}">
+<meta name="generator" content="resume-builder {{ c.app_version }}">
+<meta name="dcterms.created" content="{{ created }}">
+<meta name="dcterms.modified" content="{{ created }}">
+{% if site %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endif %}
+<style>{{ css | safe }}</style>
+</head>
+<body class="{{ c.variant }}{% if c.preview %} preview{% endif %}{% if site %} site{% endif %}">
+{% if c.preview %}<div class="watermark">PREVIEW: contains draft content</div>{% endif %}
+<main>
+<header class="contact">
+  <h1 class="name">{{ c.person.name }}</h1>
+  {#- Contact details appear only in documents, never on the public site (PRD section 10). -#}
+  {%- set items = [] -%}
+  {%- if c.person.location %}{% set _ = items.append(('location', c.person.location, none)) %}{% endif -%}
+  {%- if not site and contact.email %}{% set _ = items.append(('email', ('Email: ' if ats else '') ~ contact.email, none)) %}{% endif -%}
+  {%- if not site and contact.phone %}{% set _ = items.append(('phone', ('Phone: ' if ats else '') ~ contact.phone, none)) %}{% endif -%}
+  {%- for l in c.person.links %}{% set _ = items.append(('url', l.url if ats else l.url | bare_url, l.url)) %}{% endfor %}
+  {% if ats %}
+  {% if c.person.headline %}<p>{{ c.person.headline }}</p>{% endif %}
+  {% if items %}<p class="contact-line">{% for kind, text, href in items %}{% if not loop.first %} | {% endif %}{% if href %}<a href="{{ href }}">{{ text }}</a>{% else %}{{ text }}{% endif %}{% endfor %}</p>{% endif %}
+  {% else %}
+  {% if c.person.headline %}<div class="title">{{ c.person.headline }}</div>{% endif %}
+  {% if items %}<address class="contact-info">{% for kind, text, href in items %}{% if not loop.first %} | {% endif %}<span class="{{ kind }}">{% if href %}<a href="{{ href }}">{{ text }}</a>{% else %}{{ text }}{% endif %}</span>{% endfor %}</address>{% endif %}
+  {% endif %}
+</header>
+
+{% if c.sections.summary %}
+<section class="resume" id="summary">
+  <h2>Professional Summary</h2>
+  <p class="summary">{{ c.sections.summary | join(' ') }}</p>
+</section>
+{% endif %}
+
+{% if c.sections.roles or c.sections.earlier_roles %}
+<section class="resume" id="work-history">
+  <h2>Work Experience</h2>
+  {% for r in c.sections.roles %}
+  <article class="resume-item">
+    {% if ats %}
+    <h3>{{ r.title }}</h3>
+    <p>{{ r.company }}{% if r.location %} | {{ r.location }}{% endif %} | {{ dates(r.start, r.end) }}</p>
+    {% if r.official_title %}<p>Official title: {{ r.official_title }}</p>{% endif %}
+    {% if r.description %}<p>{{ r.description }}</p>{% endif %}
+    {% else %}
+    <header>
+      <h3 class="resume-position">{{ r.title }}</h3>
+      {% if r.official_title %}<div class="resume-official-title">Official title: {{ r.official_title }}</div>{% endif %}
+      <div class="resume-meta"><span class="resume-company">{{ r.company }}</span>{% if r.location %} | <span class="resume-company-location">{{ r.location }}</span>{% endif %} | <span class="resume-date-worked">{{ dates(r.start, r.end) }}</span></div>
+      {% if r.description %}<div class="resume-company-description">{{ r.description }}</div>{% endif %}
+    </header>
+    {% endif %}
+    {% if r.bullets %}
+    <div class="resume-responsibilities"><ul>{% for b in r.bullets %}<li>{{ bullet(b) }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  </article>
+  {% endfor %}
+  {% set early = c.sections.earlier_roles %}
+  {% if early %}
+  {#- Older roles condensed into one entry: only their own titles, companies, dates and chosen bullets. -#}
+  {% set companies = early | map(attribute='company') | unique | join(' / ') %}
+  {% set places = early | map(attribute='location') | select | unique | list %}
+  {% set first = early | map(attribute='start') | min %}
+  {% set last = early | map(attribute='end') | max %}
+  <article class="resume-item earlier">
+    {% if ats %}
+    <h3>Earlier Experience</h3>
+    <p>{{ companies }}{% if places | length == 1 %} | {{ places[0] }}{% endif %} | {{ dates(first, last) }}</p>
+    {% else %}
+    <header>
+      <h3 class="resume-position">Earlier Experience</h3>
+      <div class="resume-meta"><span class="resume-company">{{ companies }}</span>{% if places | length == 1 %} | <span class="resume-company-location">{{ places[0] }}</span>{% endif %} | <span class="resume-date-worked">{{ dates(first, last) }}</span></div>
+    </header>
+    {% endif %}
+    <div class="resume-responsibilities"><ul>
+      {% for r in early %}
+      <li>{% if ats %}{{ r.title }}{% else %}<strong>{{ r.title }}</strong>{% endif %}, {{ r.company }} | {{ dates(r.start, r.end) }}
+        {%- if r.bullets %}<ul>{% for b in r.bullets %}<li>{{ bullet(b) }}</li>{% endfor %}</ul>{% endif %}</li>
+      {% endfor %}
+    </ul></div>
+  </article>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if c.sections.skills %}
+<section class="resume" id="core-skills">
+  <h2>Core Skills</h2>
+  <ul>{% for g in c.sections.skills %}<li>{% if ats %}{{ g.name }}:{% else %}<strong>{{ g.name }}:</strong>{% endif %} {{ g['items'] | join(', ') }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% set projects = c.sections.projects %}
+{% if projects %}
+<section class="resume" id="projects">
+  {#- One project: its name is the section heading, as on a portfolio. Several: a "Projects" section. -#}
+  {% if projects | length == 1 %}<h2>{{ projects[0].name }}</h2>{% else %}<h2>Projects</h2>{% endif %}
+  {% for p in projects %}
+  <article class="resume-item project">
+    {% if projects | length > 1 %}<h3 class="resume-position">{{ p.name }}</h3>{% endif %}
+    {% if p.start %}<div class="resume-meta"><span class="resume-date-worked">{{ dates(p.start, p.end or 'present') }}</span></div>{% endif %}
+    {% if p.description %}<p class="section-link">{{ p.description | linkify(full=ats) }}</p>{% endif %}
+    {% if p.bullets %}<ul>{% for b in p.bullets %}<li>{{ bullet(b) }}</li>{% endfor %}</ul>{% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if c.sections.education %}
+<section class="resume" id="education">
+  <h2>Education</h2>
+  {% for e in c.sections.education %}
+  <p class="resume-education">
+    {%- if e.degree %}{{ e.degree }}{% if e.field %} in {{ e.field }}{% endif %}, {% elif e.field %}{{ e.field }}, {% endif -%}
+    {{ e.institution }}{% if e.end %} ({{ e.end | month_year }}){% endif -%}
+  </p>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if c.sections.certifications %}
+<section class="resume" id="certifications">
+  <h2>Certifications</h2>
+  {% for cert in c.sections.certifications %}<p>{{ cert.name }}{% if cert.issuer %}, {{ cert.issuer }}{% endif %}{% if cert.date %} ({{ cert.date | month_year }}){% endif %}</p>{% endfor %}
+</section>
+{% endif %}
+</main>
+</body>
+</html>

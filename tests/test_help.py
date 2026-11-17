@@ -181,10 +181,34 @@ def test_only_the_user_guides_are_packaged():
     if (REPO / "Dockerfile").is_file():   # in a source checkout
         dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
         copies = [ln for ln in dockerfile.splitlines() if ln.startswith("COPY docs/")]
-        assert copies == ["COPY docs/QUICKSTART.md docs/USER-MANUAL.md docs/AI-AGENTS.md ./src/resume_builder/help/"]
+        assert copies == ["COPY docs/QUICKSTART.md docs/USER-MANUAL.md docs/AI-AGENTS.md ./src/resume_builder/help/",
+                          "COPY docs/images/templates ./src/resume_builder/help/images/templates"]
     packaged = Path(helpdocs.__file__).resolve().parent / "help"
-    if packaged.is_dir():   # in the image
-        assert sorted(p.name for p in packaged.iterdir()) == sorted(g.file for g in helpdocs.GUIDES)
+    if packaged.is_dir():   # in the image: the guides, and the pictures they show
+        assert sorted(p.name for p in packaged.iterdir()) == sorted([g.file for g in helpdocs.GUIDES] + ["images"])
+        assert sorted(p.name for p in (packaged / "images").iterdir()) == ["templates"]
+
+
+def test_guide_pictures_are_served_and_nothing_else(client):
+    html = guide_html(client, "user-manual")
+    srcs = re.findall(r'<img src="([^"]+)"', html)
+    assert "/help/images/templates/modern.png" in srcs
+    for src in srcs:
+        r = client.get(src)
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content[:4] == b"\x89PNG", src
+    for bad in ("../USER-MANUAL.md", "templates/../../USER-MANUAL.md", "templates/Modern.png", "templates/x.svg",
+                "templates/missing.png", "%2e%2e/%2e%2e/pyproject.toml"):
+        assert client.get(f"/help/images/{bad}").status_code == 404, bad
+
+
+def test_every_template_has_a_preview_in_the_manual():
+    from resume_builder.config import load_settings
+    names = sorted(p.name for p in (load_settings().templates_dir / "resume").iterdir() if p.is_dir())
+    manual = (helpdocs.guides_dir() / "USER-MANUAL.md").read_text(encoding="utf-8")
+    for name in names:
+        for suffix in ("", "-ats"):
+            assert (helpdocs.guides_dir() / "images" / "templates" / f"{name}{suffix}.png").is_file(), name
+        assert f"(images/templates/{name}.png)" in manual, name
 
 
 def test_web_files_have_no_control_characters():

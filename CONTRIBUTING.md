@@ -30,7 +30,7 @@ So that this stays possible, signing off a commit also means you license your co
 - **Every feature is an operation.** Add it to the registry with a typed input model and a declared permission, so it reaches the API, the CLI and MCP from that one definition. Never check permissions in an interface.
 - **Honesty checks live in code.** Never move them into prompts.
 - **Services stay independent of storage and files.** Go through `Storage`, `FileStore` and `SecretStore`. Only the sync adapter reads or writes the user's YAML and Markdown.
-- **Schema changes are new migrations.** Released templates never change; add a new version.
+- **Schema changes are new migrations.** Released templates never change; add a new version. A new resume template (or a visible change in a new version) also needs its preview images: run `scripts/template_previews.py` as its docstring shows, and add the template to the table in the user manual's section 10.
 - **Docs change with behavior.** Update `docs/QUICKSTART.md` and `docs/USER-MANUAL.md` in the same pull request as any user-visible change. Write Markdown with one line per paragraph, without hard wraps.
 - **The user guides are also the in-app help.** `docs/QUICKSTART.md`, `docs/USER-MANUAL.md` and `docs/AI-AGENTS.md` are rendered at `/help` on the website (the image copies them into the package). Keep links between them relative (`AI-AGENTS.md#some-heading`), and treat headings as anchors other pages link to: `tests/test_help.py` fails if a link or a contextual help link on the website points to a heading that no longer exists. Raw HTML in them is shown as text, not rendered.
 
